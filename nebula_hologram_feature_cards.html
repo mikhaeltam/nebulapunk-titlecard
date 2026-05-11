@@ -1,0 +1,318 @@
+
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  .page { background: #04020f; padding: 32px 24px; display: flex; flex-direction: column; gap: 20px; font-family: system-ui, -apple-system, sans-serif; }
+
+  .card {
+    position: relative;
+    border-radius: 18px;
+    overflow: hidden;
+    padding: 40px 40px 44px;
+    min-height: 230px;
+    cursor: crosshair;
+    border: 1px solid rgba(120, 80, 255, 0.18);
+    background: #070412;
+  }
+
+  .card canvas {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .card-content {
+    position: relative;
+    z-index: 3;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid rgba(160,120,255,0.4);
+    border-radius: 999px;
+    padding: 4px 14px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .badge .dot { width: 5px; height: 5px; border-radius: 50%; }
+
+  h2 {
+    font-size: clamp(24px, 3.5vw, 34px);
+    font-weight: 900;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    margin-bottom: 14px;
+    color: #fff;
+  }
+
+  .grad-nebula { background: linear-gradient(100deg, #a78bfa, #60a5fa, #f472b6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .grad-holo   { background: linear-gradient(100deg, #34d399, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .grad-plasma { background: linear-gradient(100deg, #f472b6, #fb923c, #facc15); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+  p.desc {
+    font-size: 13.5px;
+    line-height: 1.75;
+    color: rgba(200,190,230,0.55);
+    max-width: 500px;
+  }
+
+  .holo-scan {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 0.4s;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      rgba(100,200,255,0.018) 3px,
+      rgba(100,200,255,0.018) 4px
+    );
+  }
+  .card:hover .holo-scan { opacity: 1; }
+
+  .corner {
+    position: absolute;
+    width: 14px; height: 14px;
+    pointer-events: none;
+    z-index: 4;
+    opacity: 0.5;
+  }
+  .corner.tl { top: 14px; left: 14px; border-top: 1.5px solid; border-left: 1.5px solid; border-radius: 3px 0 0 0; }
+  .corner.tr { top: 14px; right: 14px; border-top: 1.5px solid; border-right: 1.5px solid; border-radius: 0 3px 0 0; }
+  .corner.bl { bottom: 14px; left: 14px; border-bottom: 1.5px solid; border-left: 1.5px solid; border-radius: 0 0 0 3px; }
+  .corner.br { bottom: 14px; right: 14px; border-bottom: 1.5px solid; border-right: 1.5px solid; border-radius: 0 0 3px 0; }
+</style>
+
+<div class="page">
+
+  <div class="card" id="c1" data-mode="nebula">
+    <div class="holo-scan"></div>
+    <div class="corner tl" style="color:#a78bfa"></div><div class="corner tr" style="color:#a78bfa"></div>
+    <div class="corner bl" style="color:#a78bfa"></div><div class="corner br" style="color:#a78bfa"></div>
+    <canvas id="cv1"></canvas>
+    <div class="card-content">
+      <div class="badge" style="color:#c4b5fd; border-color:rgba(167,139,250,0.35)">
+        <span class="dot" style="background:#a78bfa"></span>01 — Nebula Depth
+      </div>
+      <h2>Sculpt <span class="grad-nebula">stellar clouds</span><br>with your hands</h2>
+      <p class="desc">Push and pull interstellar gas in real time. Layer emission nebulae, dust lanes, and star-forming pockets — then export as a live holographic projection.</p>
+    </div>
+  </div>
+
+  <div class="card" id="c2" data-mode="holo">
+    <div class="holo-scan"></div>
+    <div class="corner tl" style="color:#34d399"></div><div class="corner tr" style="color:#34d399"></div>
+    <div class="corner bl" style="color:#34d399"></div><div class="corner br" style="color:#34d399"></div>
+    <canvas id="cv2"></canvas>
+    <div class="card-content">
+      <div class="badge" style="color:#6ee7b7; border-color:rgba(52,211,153,0.35)">
+        <span class="dot" style="background:#34d399"></span>02 — Holographic Grid
+      </div>
+      <h2>Project any form<br>as a <span class="grad-holo">living hologram</span></h2>
+      <p class="desc">Materialise 3D wireframes straight from the void. The grid breathes with your input — distort, ripple, and fold space like a true holographic engineer.</p>
+    </div>
+  </div>
+
+  <div class="card" id="c3" data-mode="plasma">
+    <div class="holo-scan"></div>
+    <div class="corner tl" style="color:#f472b6"></div><div class="corner tr" style="color:#f472b6"></div>
+    <div class="corner bl" style="color:#f472b6"></div><div class="corner br" style="color:#f472b6"></div>
+    <canvas id="cv3"></canvas>
+    <div class="card-content">
+      <div class="badge" style="color:#f9a8d4; border-color:rgba(244,114,182,0.35)">
+        <span class="dot" style="background:#f472b6"></span>03 — Plasma Flow
+      </div>
+      <h2>Ignite <span class="grad-plasma">plasma streams</span><br>across the void</h2>
+      <p class="desc">Trace coronal arcs and solar wind currents with a single stroke. Heat maps and particle trails visualise energy density in breathtaking chromatic detail.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const cards = [
+  { id: 'c1', cvId: 'cv1', mode: 'nebula' },
+  { id: 'c2', cvId: 'cv2', mode: 'holo' },
+  { id: 'c3', cvId: 'cv3', mode: 'plasma' },
+];
+
+const palettes = {
+  nebula: [[167,139,250],[96,165,250],[244,114,182],[139,92,246],[251,191,36]],
+  holo:   [[52,211,153],[96,165,250],[167,139,250],[34,211,238],[74,222,128]],
+  plasma: [[244,114,182],[251,146,60],[250,204,21],[248,113,113],[196,181,253]],
+};
+
+function lerp3(a,b,t){ return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t]; }
+
+class CardFX {
+  constructor(cardEl, canvasEl, mode) {
+    this.card = cardEl;
+    this.canvas = canvasEl;
+    this.ctx = canvasEl.getContext('2d');
+    this.mode = mode;
+    this.mouse = {x:-9999,y:-9999,inside:false};
+    this.dots = [];
+    this.t = Math.random()*100;
+    this.pal = palettes[mode];
+    this.resize();
+    this.bindEvents();
+  }
+
+  resize() {
+    const W = this.card.offsetWidth, H = this.card.offsetHeight;
+    this.canvas.width = W; this.canvas.height = H;
+    this.W = W; this.H = H;
+    this.buildDots();
+  }
+
+  buildDots() {
+    this.dots = [];
+    const mode = this.mode;
+    const W = this.W, H = this.H;
+
+    if (mode === 'nebula') {
+      const cx = W*0.68, cy = H*0.45, rx = W*0.28, ry = H*0.42;
+      for (let i=0; i<220; i++) {
+        const a = Math.random()*Math.PI*2;
+        const r = Math.pow(Math.random(),0.6);
+        const x = cx + Math.cos(a)*rx*r + (Math.random()-0.5)*30;
+        const y = cy + Math.sin(a)*ry*r + (Math.random()-0.5)*30;
+        this.dots.push({ x, y, bx:x, by:y, phase:Math.random()*Math.PI*2, cp:Math.random()*Math.PI*2, cs:0.003+Math.random()*0.006, size:0.8+Math.random()*2.2, bright:0.1+Math.random()*0.7 });
+      }
+    } else if (mode === 'holo') {
+      const cols=22, rows=10;
+      const sx=W*0.38, ex=W*0.97, sy=H*0.06, ey=H*0.94;
+      for (let r=0;r<rows;r++) for (let c=0;c<cols;c++) {
+        const x=sx+(c/(cols-1))*(ex-sx), y=sy+(r/(rows-1))*(ey-sy);
+        this.dots.push({ x, y, bx:x, by:y, phase:Math.random()*Math.PI*2, cp:Math.random()*Math.PI*2, cs:0.004+Math.random()*0.004, size:1.2, bright:0.25+Math.random()*0.5, row:r, col:c });
+      }
+    } else {
+      for (let i=0; i<180; i++) {
+        const frac = i/180;
+        const t2 = frac*Math.PI*3.5;
+        const spread = 0.15+frac*0.35;
+        const cx=W*0.62, cy=H*0.5;
+        const armR = (W*0.08 + frac*W*0.32);
+        const x = cx + Math.cos(t2)*armR + (Math.random()-0.5)*W*spread*0.4;
+        const y = cy + Math.sin(t2)*armR*0.55 + (Math.random()-0.5)*H*spread*0.45;
+        this.dots.push({ x, y, bx:x, by:y, phase:Math.random()*Math.PI*2, cp:frac*Math.PI*2, cs:0.005+Math.random()*0.005, size:0.8+Math.random()*2, bright:0.15+Math.random()*0.7, frac });
+      }
+    }
+  }
+
+  getColor(dot, prox) {
+    const p = this.pal;
+    const pi = (dot.cp + this.t*dot.cs*50) % (Math.PI*2);
+    const f = pi/(Math.PI*2);
+    const i1 = Math.floor(f*p.length)%p.length;
+    const i2 = (i1+1)%p.length;
+    const mix = (f*p.length)-i1;
+    let c = lerp3(p[i1],p[i2],mix);
+    if (prox>0) c = lerp3(c,[255,255,255],prox*0.55);
+    return c;
+  }
+
+  draw() {
+    const {ctx,W,H,dots,t,mouse,mode} = this;
+    ctx.clearRect(0,0,W,H);
+
+    if (mode==='holo') {
+      ctx.strokeStyle='rgba(52,211,153,0.04)';
+      ctx.lineWidth=0.5;
+      const cols=22,rows=10,sx=W*0.38,ex=W*0.97,sy=H*0.06,ey=H*0.94;
+      for(let r=0;r<rows;r++){
+        ctx.beginPath();
+        ctx.moveTo(sx,sy+(r/(rows-1))*(ey-sy));
+        ctx.lineTo(ex,sy+(r/(rows-1))*(ey-sy));
+        ctx.stroke();
+      }
+      for(let c=0;c<cols;c++){
+        ctx.beginPath();
+        ctx.moveTo(sx+(c/(cols-1))*(ex-sx),sy);
+        ctx.lineTo(sx+(c/(cols-1))*(ex-sx),ey);
+        ctx.stroke();
+      }
+    }
+
+    for (const dot of dots) {
+      dot.cp += dot.cs;
+      const wave = Math.sin(t*1.1+dot.phase)*0.5+0.5;
+
+      let prox=0, pushed=false;
+      if (mouse.inside) {
+        const dx=dot.x-mouse.x, dy=dot.y-mouse.y;
+        const dist=Math.sqrt(dx*dx+dy*dy);
+        const rad=mode==='nebula'?110:mode==='holo'?80:95;
+        if(dist<rad){
+          prox=Math.pow(1-dist/rad,2.2);
+          const push=prox*(mode==='holo'?22:16);
+          dot.x += (dx/(dist+0.001))*push*0.35 + (dot.bx-dot.x)*0.04;
+          dot.y += (dy/(dist+0.001))*push*0.35 + (dot.by-dot.y)*0.04;
+          pushed=true;
+        }
+      }
+      if(!pushed){ dot.x+=(dot.bx-dot.x)*0.07; dot.y+=(dot.by-dot.y)*0.07; }
+
+      const alpha = Math.min(1, dot.bright*0.45 + wave*0.3 + prox*0.55);
+      const size = dot.size + prox*3 + wave*0.5;
+      const [r,g,b] = this.getColor(dot,prox);
+      const rc=Math.round(r),gc=Math.round(g),bc=Math.round(b);
+
+      ctx.beginPath();
+      ctx.arc(dot.x,dot.y,size,0,Math.PI*2);
+      ctx.fillStyle=`rgba(${rc},${gc},${bc},${alpha})`;
+      ctx.fill();
+
+      if(prox>0.25){
+        const grad=ctx.createRadialGradient(dot.x,dot.y,0,dot.x,dot.y,size*5);
+        grad.addColorStop(0,`rgba(${rc},${gc},${bc},${prox*0.18})`);
+        grad.addColorStop(1,`rgba(${rc},${gc},${bc},0)`);
+        ctx.beginPath();
+        ctx.arc(dot.x,dot.y,size*5,0,Math.PI*2);
+        ctx.fillStyle=grad;
+        ctx.fill();
+      }
+
+      if(mode==='holo' && prox>0.1){
+        ctx.strokeStyle=`rgba(${rc},${gc},${bc},${prox*0.25})`;
+        ctx.lineWidth=0.5;
+        const nb=dots.filter(d=>Math.abs(d.row-dot.row)<=1&&Math.abs(d.col-dot.col)<=1&&d!==dot);
+        for(const n of nb){
+          ctx.beginPath();ctx.moveTo(dot.x,dot.y);ctx.lineTo(n.x,n.y);ctx.stroke();
+        }
+      }
+    }
+
+    this.t+=0.016;
+  }
+
+  bindEvents() {
+    this.card.addEventListener('mousemove',e=>{
+      const rect=this.card.getBoundingClientRect();
+      this.mouse.x=e.clientX-rect.left;
+      this.mouse.y=e.clientY-rect.top;
+    });
+    this.card.addEventListener('mouseenter',()=>{this.mouse.inside=true;});
+    this.card.addEventListener('mouseleave',()=>{this.mouse.inside=false;this.mouse.x=-9999;this.mouse.y=-9999;});
+  }
+}
+
+const fxList = cards.map(c=>{
+  return new CardFX(document.getElementById(c.id), document.getElementById(c.cvId), c.mode);
+});
+
+function loop(){
+  fxList.forEach(fx=>fx.draw());
+  requestAnimationFrame(loop);
+}
+loop();
+
+window.addEventListener('resize',()=>fxList.forEach(fx=>fx.resize()));
+</script>
