@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Nebulapunk — Construct Based Workflow</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; background:#070412; overflow:hidden; font-family:system-ui,-apple-system,sans-serif; }
+.card { position:relative; width:100%; height:100%; background:#070412; cursor:none; overflow:hidden; }
+canvas { position:absolute; inset:0; pointer-events:none; }
+.holo-lines { position:absolute; inset:0; pointer-events:none; z-index:2; opacity:0; transition:opacity 0.5s; background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(244,114,182,0.012) 3px,rgba(244,114,182,0.012) 4px); }
+.card:hover .holo-lines { opacity:1; }
+.corner { position:absolute; width:13px; height:13px; pointer-events:none; z-index:4; opacity:0.4; }
+.corner.tl{top:13px;left:13px;border-top:1.5px solid #f472b6;border-left:1.5px solid #f472b6;}
+.corner.tr{top:13px;right:13px;border-top:1.5px solid #f472b6;border-right:1.5px solid #f472b6;}
+.corner.bl{bottom:13px;left:13px;border-bottom:1.5px solid #f472b6;border-left:1.5px solid #f472b6;}
+.corner.br{bottom:13px;right:13px;border-bottom:1.5px solid #f472b6;border-right:1.5px solid #f472b6;}
+.content { position:absolute; left:40px; bottom:40px; z-index:5; pointer-events:none; max-width:420px; }
+.badge { display:inline-flex; align-items:center; gap:7px; border:1px solid rgba(244,114,182,0.35); border-radius:2px; padding:4px 13px; margin-bottom:14px; font-size:10px; font-weight:700; letter-spacing:0.18em; text-transform:uppercase; color:#f472b6; }
+.badge-dot { width:5px; height:5px; border-radius:50%; background:#f472b6; }
+h2 { font-size:clamp(18px,2.6vw,28px); font-weight:900; color:#f0f0ff; letter-spacing:-0.015em; line-height:1.12; margin-bottom:12px; }
+h2 span { background:linear-gradient(100deg,#f472b6,#a78bfa,#60a5fa); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+p { font-size:12px; color:rgba(210,195,235,0.78); letter-spacing:0.03em; line-height:1.78; }
+.status { position:absolute; top:16px; right:20px; font-size:9px; letter-spacing:0.16em; text-transform:uppercase; color:#f472b6; opacity:0.38; z-index:5; pointer-events:none; }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <canvas id="cv"></canvas>
+  <div class="holo-lines"></div>
+  <div class="corner tl"></div><div class="corner tr"></div>
+  <div class="corner bl"></div><div class="corner br"></div>
+  <div class="content">
+    <div class="badge"><span class="badge-dot"></span>01 — Key Feature</div>
+    <h2>Construct Based<br><span>Workflow</span></h2>
+    <p>Instead of being bound to static volumes, Nebulapunk uses a modular construct system that lets you freely position, shape, and arrange effects directly in the viewport.</p>
+  </div>
+  <div class="status">Nebulapunk</div>
+</div>
+
+<script>
+const card = document.getElementById('card');
+const cv   = document.getElementById('cv');
+const ctx  = cv.getContext('2d');
+
+let W, H, dots = [], t = 0;
+const mouse = { x:-9999, y:-9999, inside:false };
+let lensStr = 0;
+
+const PAL = [
+  [244,114,182],
+  [167,139,250],
+  [ 96,165,250],
+  [220,100,200],
+  [200,130,255],
+  [248,180,255],
+];
+
+function rnd(a,b){ return a+(b-a)*Math.random(); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+
+function resize(){
+  W = cv.width  = card.offsetWidth;
+  H = cv.height = card.offsetHeight;
+  build();
+}
+
+function build(){
+  dots = [];
+  const count = Math.floor((W * H) / 900);
+  for(let i = 0; i < count; i++){
+    const bx = rnd(0, W);
+    const by = rnd(0, H);
+    const ci = Math.floor(Math.random() * PAL.length);
+    dots.push({
+      x: bx, y: by, bx, by,
+      vx: 0, vy: 0,
+      phase:      Math.random() * Math.PI * 2,
+      phase2:     Math.random() * Math.PI * 2,
+      freq:       2.5 + Math.random() * 5.0,
+      freq2:      1.5 + Math.random() * 3.5,
+      orbitAngle: Math.random() * Math.PI * 2,
+      orbitR:     15 + Math.random() * 90,
+      orbitSpd:   (Math.random() < 0.5 ? 1 : -1) * (0.018 + Math.random() * 0.038),
+      r: PAL[ci][0], g: PAL[ci][1], b: PAL[ci][2],
+      size:       0.4 + Math.random() * 1.5,
+      baseDim:    0.22 + Math.random() * 0.18,
+      sparkleMax: 0.85 + Math.random() * 0.15,
+    });
+  }
+}
+
+function draw(){
+  ctx.clearRect(0, 0, W, H);
+  t += 0.016;
+
+  lensStr = mouse.inside
+    ? Math.min(1, lensStr + 0.045)
+    : Math.max(0, lensStr - 0.045);
+
+  const lensX    = mouse.x;
+  const lensY    = mouse.y;
+  const captureR = 140 * lensStr;
+
+  for(const d of dots){
+    const raw1   = Math.sin(t * d.freq  + d.phase)  * 0.5 + 0.5;
+    const raw2   = Math.sin(t * d.freq2 + d.phase2) * 0.5 + 0.5;
+    const sparkle = Math.pow(raw1 * raw2, 0.25);
+
+    let boost = 0;
+
+    if(lensStr > 0){
+      const dx = d.bx - lensX, dy = d.by - lensY;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if(dist < captureR){
+        boost = Math.pow(1 - dist / captureR, 1.8) * lensStr;
+        const targetR = Math.max(12, dist * 0.28 + d.orbitR * 0.08) * lensStr;
+        const toX = lensX + Math.cos(d.orbitAngle) * targetR - d.x;
+        const toY = lensY + Math.sin(d.orbitAngle) * targetR - d.y;
+        d.vx += toX * 0.09 * boost;
+        d.vy += toY * 0.09 * boost;
+        d.orbitAngle += d.orbitSpd * lensStr;
+      }
+    }
+
+    d.vx += (d.bx - d.x) * 0.032;
+    d.vy += (d.by - d.y) * 0.032;
+    d.vx *= 0.78; d.vy *= 0.78;
+    d.x  += d.vx;  d.y  += d.vy;
+
+    const idleAlpha  = d.baseDim + sparkle * d.sparkleMax;
+    const hoverAlpha = d.baseDim + sparkle * d.sparkleMax * 0.4 + boost * 0.95;
+    const alpha = Math.min(1, lerp(idleAlpha, hoverAlpha, lensStr));
+
+    const sz = d.size + sparkle * 0.8 + boost * 3.2;
+    const rc = Math.round(lerp(d.r, 255, boost * 0.35));
+    const gc = Math.round(lerp(d.g, 255, boost * 0.12));
+    const bc = Math.round(lerp(d.b, 255, boost * 0.35));
+
+    // bloom on sparkle peaks
+    if(sparkle > 0.72){
+      const peakStr = (sparkle - 0.72) / 0.28;
+      const gr = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, sz * 5);
+      gr.addColorStop(0, `rgba(${d.r},${d.g},${d.b},${peakStr * 0.35})`);
+      gr.addColorStop(1, `rgba(${d.r},${d.g},${d.b},0)`);
+      ctx.beginPath(); ctx.arc(d.x, d.y, sz * 5, 0, Math.PI*2);
+      ctx.fillStyle = gr; ctx.fill();
+    }
+
+    // hover bloom
+    if(boost > 0.28){
+      const gr = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, sz * 5.5);
+      gr.addColorStop(0, `rgba(${rc},${gc},${bc},${boost * 0.22})`);
+      gr.addColorStop(1, `rgba(${rc},${gc},${bc},0)`);
+      ctx.beginPath(); ctx.arc(d.x, d.y, sz * 5.5, 0, Math.PI*2);
+      ctx.fillStyle = gr; ctx.fill();
+    }
+
+    ctx.beginPath(); ctx.arc(d.x, d.y, sz, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(${rc},${gc},${bc},${alpha})`;
+    ctx.fill();
+  }
+
+  // lens overlay
+  if(lensStr > 0.02 && mouse.inside){
+    for(let a = 0; a < 5; a++){
+      const ang = t * 0.75 + a * (Math.PI * 2 / 5);
+      ctx.beginPath();
+      ctx.arc(lensX, lensY, 58 * lensStr, ang, ang + 0.75);
+      ctx.strokeStyle = `rgba(220,140,255,${lensStr * 0.45})`;
+      ctx.lineWidth = 1.2; ctx.stroke();
+    }
+    for(let a = 0; a < 3; a++){
+      const ang = -t * 1.1 + a * (Math.PI * 2 / 3);
+      ctx.beginPath();
+      ctx.arc(lensX, lensY, 38 * lensStr, ang, ang + 1.1);
+      ctx.strokeStyle = `rgba(244,114,182,${lensStr * 0.35})`;
+      ctx.lineWidth = 0.8; ctx.stroke();
+    }
+    for(let ring = 1; ring <= 4; ring++){
+      ctx.beginPath();
+      ctx.arc(lensX, lensY, ring * 20 * lensStr, 0, Math.PI*2);
+      ctx.strokeStyle = `rgba(244,114,182,${lensStr * 0.09 / ring})`;
+      ctx.lineWidth = 1; ctx.stroke();
+    }
+    const cg = ctx.createRadialGradient(lensX, lensY, 0, lensX, lensY, 45 * lensStr);
+    cg.addColorStop(0, `rgba(244,114,182,${lensStr * 0.28})`);
+    cg.addColorStop(0.5, `rgba(167,139,250,${lensStr * 0.1})`);
+    cg.addColorStop(1, 'rgba(167,139,250,0)');
+    ctx.beginPath(); ctx.arc(lensX, lensY, 45 * lensStr, 0, Math.PI*2);
+    ctx.fillStyle = cg; ctx.fill();
+    ctx.beginPath(); ctx.arc(lensX, lensY, 3.5, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(255,200,255,${lensStr * 0.95})`;
+    ctx.fill();
+  }
+
+  requestAnimationFrame(draw);
+}
+
+card.addEventListener('mousemove', e => {
+  const r = card.getBoundingClientRect();
+  mouse.x = e.clientX - r.left;
+  mouse.y = e.clientY - r.top;
+});
+card.addEventListener('mouseenter', () => mouse.inside = true);
+card.addEventListener('mouseleave', () => {
+  mouse.inside = false;
+  mouse.x = -9999; mouse.y = -9999;
+});
+
+window.addEventListener('resize', resize);
+resize();
+draw();
+</script>
+</body>
+</html>
