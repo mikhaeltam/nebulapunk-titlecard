@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Nebulapunk — Voxel Terrain</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; background:#070412; overflow:hidden; }
+.card { position:relative; width:100%; height:100%; background:#070412; cursor:none; overflow:hidden; }
+canvas { position:absolute; inset:0; pointer-events:none; }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <canvas id="cv"></canvas>
+</div>
+<script>
+const card = document.getElementById('card');
+const cv   = document.getElementById('cv');
+const ctx  = cv.getContext('2d');
+
+const COLOR_CACHE = {};
+
+let W, H, t = 0;
+let cols, rows, cellW, cellH;
+let heights, targetHeights;
+const mouse = { x:-9999, y:-9999, inside:false };
+
+const ISO_ANGLE = 26;
+const ISO_RAD   = ISO_ANGLE * Math.PI / 180;
+const MAX_H     = 90;
+const LERP_SPD  = 0.10;
+
+let projCache = null;
+
+// ── Starfield ──────────────────────────────────────────────────────────────────
+const STAR_COUNT = 65;
+let stars = [];
+
+function buildStars(){
+  stars = [];
+  for(let i = 0; i < STAR_COUNT; i++){
+    stars.push({
+      x: Math.random() * W,
+      y: Math.random() * H * 0.60,
+      r: Math.random() < 0.18 ? 1.5 : 1,
+      base:  0.25 + Math.random() * 0.45,
+      flicker: 0,
+      flickerTimer: Math.floor(Math.random() * 120),
+      tint: i % 3
+    });
+  }
+}
+
+function drawStars(){
+  for(let i = 0; i < stars.length; i++){
+    const s = stars[i];
+    s.flickerTimer--;
+    if(s.flickerTimer <= 0){
+      s.flicker = 1.0;
+      s.flickerTimer = 70 + Math.floor(Math.random() * 200);
+    }
+    if(s.flicker > 0) s.flicker = Math.max(0, s.flicker - 0.055);
+    const a = Math.min(1, s.base + s.flicker * 0.75);
+    ctx.fillStyle = s.tint === 0 ? `rgba(255,255,255,${a})`  :
+                    s.tint === 1 ? `rgba(255,180,255,${a})`  :
+                                   `rgba(180,205,255,${a})`;
+    ctx.fillRect(s.x, s.y, s.r, s.r);
+  }
+}
+
+// ── Nebula vignette ────────────────────────────────────────────────────────────
+let vignetteGrad = null;
+
+function buildVignette(){
+  vignetteGrad = ctx.createRadialGradient(W * 0.5, H * 0.5, H * 0.08, W * 0.5, H * 0.5, H * 0.9);
+  vignetteGrad.addColorStop(0,    'rgba(0,0,0,0)');
+  vignetteGrad.addColorStop(0.45, 'rgba(8,2,22,0.20)');
+  vignetteGrad.addColorStop(1,    'rgba(4,0,14,0.86)');
+}
+
+function drawVignette(){
+  ctx.fillStyle = vignetteGrad;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// ── Crystal flicker ────────────────────────────────────────────────────────────
+const FLICKER_CHANCE = 0.022;
+const FLICKER_COLS = [
+  'rgba(255,230,255,0.95)',
+  'rgba(210,170,255,0.90)',
+  'rgba(170,210,255,0.88)',
+  'rgba(255,255,255,0.97)',
+  'rgba(255,160,230,0.92)',
+];
+let flickerLife = null;
+
+// ── Core helpers ───────────────────────────────────────────────────────────────
+function lerp(a, b, t){ return a + (b - a) * t; }
+
+function noise(x, y, t2){
+  return (
+    Math.sin(x * 0.8 + t2 * 0.6) * 0.45 +
+    Math.sin(y * 0.6 + t2 * 0.4) * 0.35 +
+    Math.sin((x + y) * 0.5 + t2 * 0.7) * 0.20
+  );
+}
+
+function resize(){
+  W = cv.width  = card.offsetWidth;
+  H = cv.height = card.offsetHeight;
+  build();
+}
+
+function build(){
+  cols = 20;
+  rows = 12;
+  cellW = (W * 0.85) / cols;
+  cellH = (H * 0.55) / rows;
+  heights       = new Float32Array(cols * rows);
+  targetHeights = new Float32Array(cols * rows);
+  flickerLife   = new Uint8Array(cols * rows);
+
+  // (cols+1)×(rows+1) corner cache — edge voxels need c+1 / r+1
+  projCache = new Float32Array((cols+1) * (rows+1) * 2);
+  for(let r = 0; r <= rows; r++){
+    for(let c = 0; c <= cols; c++){
+      const ox = W * 0.5, oy = H * 0.72;
+      const ix = (c - cols/2) * cellW + (r - rows/2) * cellW * 0.5;
+      const iy = (r - rows/2) * cellH * Math.cos(ISO_RAD);
+      const base = (r * (cols+1) + c) * 2;
+      projCache[base]   = ox + ix + (c - cols/2) * cellH * 0.28;
+      projCache[base+1] = oy + iy;
+    }
+  }
+
+  buildStars();
+  buildVignette();
+  Object.keys(COLOR_CACHE).forEach(k => delete COLOR_CACHE[k]);
+}
+
+const PT_TL={x:0,y:0}, PT_TR={x:0,y:0}, PT_BL={x:0,y:0}, PT_BR={x:0,y:0};
+const PT_TL0={x:0,y:0}, PT_TR0={x:0,y:0}, PT_BL0={x:0,y:0}, PT_BR0={x:0,y:0};
+
+function isoFast(c, r, h, pt){
+  const base = (r * (cols+1) + c) * 2;
+  pt.x = projCache[base];
+  pt.y = projCache[base+1] - h;
+}
+
+function getColor(normQ, side){
+  const key = normQ * 3 + (side === 'top' ? 0 : side === 'right' ? 1 : 2);
+  if(COLOR_CACHE[key]) return COLOR_CACHE[key];
+  const norm = normQ / 15;
+  const r  = Math.floor(lerp(20,  220, norm));
+  const g  = Math.floor(lerp(10,   40, norm));
+  const b  = Math.floor(lerp(120, 255, norm));
+  const rr = Math.floor(r + norm * norm * 35);
+  const f  = side === 'top' ? 1.0 : side === 'right' ? 0.52 : 0.35;
+  const col = `rgb(${Math.min(255,Math.round(rr*f))},${Math.round(g*f)},${Math.round(b*f)})`;
+  COLOR_CACHE[key] = col;
+  return col;
+}
+
+function drawVoxel(c, r, h, idx){
+  if(h < 1) return;
+  const norm  = h / MAX_H;
+  const normQ = Math.min(15, Math.floor(norm * 15));
+  const c1 = c+1, r1 = r+1;
+
+  isoFast(c,  r,  h, PT_TL);  isoFast(c1, r,  h, PT_TR);
+  isoFast(c,  r1, h, PT_BL);  isoFast(c1, r1, h, PT_BR);
+  isoFast(c,  r,  0, PT_TL0); isoFast(c1, r,  0, PT_TR0);
+  isoFast(c,  r1, 0, PT_BL0); isoFast(c1, r1, 0, PT_BR0);
+
+  // left face
+  ctx.beginPath();
+  ctx.moveTo(PT_TL.x,  PT_TL.y);
+  ctx.lineTo(PT_BL.x,  PT_BL.y);
+  ctx.lineTo(PT_BL0.x, PT_BL0.y);
+  ctx.lineTo(PT_TL0.x, PT_TL0.y);
+  ctx.closePath();
+  ctx.fillStyle = getColor(normQ, 'left');
+  ctx.fill();
+
+  // right face
+  ctx.beginPath();
+  ctx.moveTo(PT_TR.x,  PT_TR.y);
+  ctx.lineTo(PT_BR.x,  PT_BR.y);
+  ctx.lineTo(PT_BR0.x, PT_BR0.y);
+  ctx.lineTo(PT_TR0.x, PT_TR0.y);
+  ctx.closePath();
+  ctx.fillStyle = getColor(normQ, 'right');
+  ctx.fill();
+
+  // top face — crystal flicker on tall voxels
+  ctx.beginPath();
+  ctx.moveTo(PT_TL.x, PT_TL.y);
+  ctx.lineTo(PT_TR.x, PT_TR.y);
+  ctx.lineTo(PT_BR.x, PT_BR.y);
+  ctx.lineTo(PT_BL.x, PT_BL.y);
+  ctx.closePath();
+
+  if(norm > 0.45 && flickerLife[idx] > 0){
+    ctx.fillStyle = FLICKER_COLS[idx % FLICKER_COLS.length];
+    flickerLife[idx]--;
+  } else {
+    ctx.fillStyle = getColor(normQ, 'top');
+    if(norm > 0.45 && Math.random() < FLICKER_CHANCE){
+      flickerLife[idx] = 2 + Math.floor(Math.random() * 3);
+    }
+  }
+  ctx.fill();
+}
+
+function draw(){
+  ctx.clearRect(0, 0, W, H);
+  t += 0.016;
+
+  // Stars behind everything
+  drawStars();
+
+  for(let r = 0; r < rows; r++){
+    for(let c = 0; c < cols; c++){
+      const idx = r * cols + c;
+      let target = (noise(c * 0.18, r * 0.22, t) * 0.5 + 0.5) * MAX_H * 0.45;
+
+      if(mouse.inside){
+        const base = (r * (cols+1) + c) * 2;
+        const dx = projCache[base]   - mouse.x;
+        const dy = projCache[base+1] - mouse.y;
+        const dist2 = dx*dx + dy*dy;
+        const rad = 130;
+        if(dist2 < rad * rad){
+          const pull = Math.pow(1 - Math.sqrt(dist2) / rad, 2);
+          target += pull * MAX_H * 0.85;
+        }
+      }
+
+      targetHeights[idx] = target;
+      heights[idx] = lerp(heights[idx], target, LERP_SPD);
+    }
+  }
+
+  for(let r = 0; r < rows; r++){
+    for(let c = 0; c < cols; c++){
+      drawVoxel(c, r, heights[r * cols + c], r * cols + c);
+    }
+  }
+
+  // Ground grid — purple tint, sparse
+  ctx.strokeStyle = 'rgba(140,80,200,0.07)';
+  ctx.lineWidth = 0.5;
+  for(let r = 0; r <= rows; r += 2){
+    const ax = projCache[r*(cols+1)*2], ay = projCache[r*(cols+1)*2+1];
+    const bIdx = (r*(cols+1) + cols) * 2;
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(projCache[bIdx], projCache[bIdx+1]); ctx.stroke();
+  }
+  for(let c = 0; c <= cols; c += 2){
+    const aIdx = c * 2, bIdx = (rows*(cols+1)+c) * 2;
+    ctx.beginPath();
+    ctx.moveTo(projCache[aIdx],   projCache[aIdx+1]);
+    ctx.lineTo(projCache[bIdx],   projCache[bIdx+1]);
+    ctx.stroke();
+  }
+
+  // Nebula vignette over everything
+  drawVignette();
+
+  requestAnimationFrame(draw);
+}
+
+card.addEventListener('mousemove', e => {
+  const r = card.getBoundingClientRect();
+  mouse.x = e.clientX - r.left;
+  mouse.y = e.clientY - r.top;
+});
+card.addEventListener('mouseenter', () => mouse.inside = true);
+card.addEventListener('mouseleave', () => {
+  mouse.inside = false;
+  mouse.x = -9999; mouse.y = -9999;
+});
+
+window.addEventListener('resize', resize);
+resize(); draw();
+</script>
+</body>
+</html>
