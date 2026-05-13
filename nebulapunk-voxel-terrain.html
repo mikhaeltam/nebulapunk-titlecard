@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Nebulapunk — Voxel Terrain</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; background:#070412; overflow:hidden; }
+.card { position:relative; width:100%; height:100%; background:#070412; cursor:none; overflow:hidden; }
+canvas { position:absolute; inset:0; pointer-events:none; }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <canvas id="cv"></canvas>
+</div>
+<script>
+const card = document.getElementById('card');
+const cv   = document.getElementById('cv');
+const ctx  = cv.getContext('2d');
+
+let W, H, t = 0;
+let cols, rows, cellW, cellH;
+let heights, targetHeights;
+const mouse = { x:-9999, y:-9999, inside:false };
+
+const ISO_ANGLE = 26;
+const ISO_RAD   = ISO_ANGLE * Math.PI / 180;
+const MAX_H     = 90;
+
+function lerp(a,b,t){ return a+(b-a)*t; }
+
+function noise(x, y, t2){
+  return (
+    Math.sin(x * 0.8 + t2 * 0.6) * 0.4 +
+    Math.sin(y * 0.6 + t2 * 0.4) * 0.3 +
+    Math.sin((x + y) * 0.5 + t2 * 0.7) * 0.2 +
+    Math.sin(x * 1.4 - y * 0.9 + t2 * 0.3) * 0.1
+  );
+}
+
+function resize(){
+  W = cv.width  = card.offsetWidth;
+  H = cv.height = card.offsetHeight;
+  build();
+}
+
+function build(){
+  cols = 38;
+  rows = 22;
+  cellW = (W * 0.85) / cols;
+  cellH = (H * 0.55) / rows;
+  heights       = new Float32Array(cols * rows);
+  targetHeights = new Float32Array(cols * rows);
+}
+
+function isoProject(c, r, h){
+  const ox = W * 0.5;
+  const oy = H * 0.72;
+  const ix = (c - cols/2) * cellW  + (r - rows/2) * cellW  * 0.5;
+  const iy = (r - rows/2) * cellH  * Math.cos(ISO_RAD) - h;
+  return { x: ox + ix, y: oy + iy + (c - cols/2) * cellH * 0.28 };
+}
+
+function getColor(norm, side){
+  const r = Math.floor(lerp(30,  80,  norm));
+  const g = Math.floor(lerp(10, 180,  norm));
+  const b = Math.floor(lerp(80, 255,  norm));
+  const f = side === 'top' ? 1.0 : side === 'right' ? 0.55 : 0.38;
+  return `rgb(${Math.round(r*f)},${Math.round(g*f)},${Math.round(b*f)})`;
+}
+
+function drawVoxel(c, r, h){
+  if(h < 1) return;
+  const norm = h / MAX_H;
+
+  const tl  = isoProject(c,   r,   h);
+  const tr  = isoProject(c+1, r,   h);
+  const bl  = isoProject(c,   r+1, h);
+  const br  = isoProject(c+1, r+1, h);
+  const tl0 = isoProject(c,   r,   0);
+  const tr0 = isoProject(c+1, r,   0);
+  const bl0 = isoProject(c,   r+1, 0);
+  const br0 = isoProject(c+1, r+1, 0);
+
+  // left face
+  ctx.beginPath();
+  ctx.moveTo(tl.x, tl.y); ctx.lineTo(bl.x, bl.y);
+  ctx.lineTo(bl0.x, bl0.y); ctx.lineTo(tl0.x, tl0.y);
+  ctx.closePath();
+  ctx.fillStyle = getColor(norm, 'left');
+  ctx.fill();
+  ctx.strokeStyle = `rgba(0,180,255,${0.06 + norm*0.08})`;
+  ctx.lineWidth = 0.4; ctx.stroke();
+
+  // right face
+  ctx.beginPath();
+  ctx.moveTo(tr.x, tr.y); ctx.lineTo(br.x, br.y);
+  ctx.lineTo(br0.x, br0.y); ctx.lineTo(tr0.x, tr0.y);
+  ctx.closePath();
+  ctx.fillStyle = getColor(norm, 'right');
+  ctx.fill();
+  ctx.strokeStyle = `rgba(0,180,255,${0.06 + norm*0.08})`;
+  ctx.lineWidth = 0.4; ctx.stroke();
+
+  // top face
+  ctx.beginPath();
+  ctx.moveTo(tl.x, tl.y); ctx.lineTo(tr.x, tr.y);
+  ctx.lineTo(br.x, br.y); ctx.lineTo(bl.x, bl.y);
+  ctx.closePath();
+  ctx.fillStyle = getColor(norm, 'top');
+  ctx.fill();
+
+  // top edge glow on tall voxels
+  if(norm > 0.5){
+    ctx.strokeStyle = `rgba(100,255,220,${(norm-0.5)*0.9})`;
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(tl.x, tl.y); ctx.lineTo(tr.x, tr.y);
+    ctx.lineTo(br.x, br.y); ctx.lineTo(bl.x, bl.y);
+    ctx.closePath(); ctx.stroke();
+  }
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  t += 0.016;
+
+  for(let r=0; r<rows; r++){
+    for(let c=0; c<cols; c++){
+      const idx = r*cols+c;
+      let target = (noise(c*0.18, r*0.22, t) * 0.5 + 0.5) * MAX_H * 0.45;
+
+      if(mouse.inside){
+        const cp = isoProject(c+0.5, r+0.5, 0);
+        const dx = cp.x - mouse.x, dy = cp.y - mouse.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const rad = 130;
+        if(dist < rad){
+          const pull = Math.pow(1 - dist/rad, 2);
+          target += pull * MAX_H * 0.85;
+        }
+      }
+
+      targetHeights[idx] = target;
+      heights[idx] = lerp(heights[idx], targetHeights[idx], 0.10);
+    }
+  }
+
+  for(let r=0; r<rows; r++){
+    for(let c=0; c<cols; c++){
+      drawVoxel(c, r, heights[r*cols+c]);
+    }
+  }
+
+  // ground grid
+  ctx.strokeStyle = 'rgba(0,150,200,0.06)';
+  ctx.lineWidth = 0.5;
+  for(let r=0; r<=rows; r++){
+    const a = isoProject(0, r, 0), b = isoProject(cols, r, 0);
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+  }
+  for(let c=0; c<=cols; c++){
+    const a = isoProject(c, 0, 0), b = isoProject(c, rows, 0);
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+  }
+
+  requestAnimationFrame(draw);
+}
+
+card.addEventListener('mousemove',e=>{
+  const r=card.getBoundingClientRect();
+  mouse.x=e.clientX-r.left; mouse.y=e.clientY-r.top;
+});
+card.addEventListener('mouseenter',()=>mouse.inside=true);
+card.addEventListener('mouseleave',()=>{
+  mouse.inside=false; mouse.x=-9999; mouse.y=-9999;
+});
+
+window.addEventListener('resize',resize);
+resize(); draw();
+</script>
+</body>
+</html>
