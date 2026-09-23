@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nebulapunk pricing list</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; }
+    body {
+      font-family: Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      padding: 6px 0 40px 0;
+    }
+    ul { list-style: none; margin: 0; padding: 0; }
+    li {
+      display: flex;
+      align-items: center;
+      height: 30px;
+      font-size: 13px;
+      font-weight: 400;
+      color: #5a5765;
+      letter-spacing: 0.01em;
+    }
+    .mark {
+      width: 14px;
+      margin-right: 12px;
+      flex: none;
+      display: flex;
+      justify-content: center;
+      color: #07040f;
+    }
+    .mark svg { width: 13px; height: 13px; display: block; }
+    .mark .num { font-size: 13px; font-weight: 600; line-height: 1; }
+
+    /* info icon + bubble */
+    .info {
+      position: relative;
+      margin-left: 8px;
+      width: 15px;
+      height: 15px;
+      padding: 0;
+      border: 0;
+      background: none;
+      cursor: pointer;
+      color: #a8a4bc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color .15s ease;
+    }
+    .info svg { width: 15px; height: 15px; display: block; }
+    .info:hover, .info:focus-visible { color: #07040f; outline: none; }
+
+    .bubble {
+      position: absolute;
+      left: calc(100% + 12px);
+      top: 50%;
+      transform: translate(-4px, -50%);
+      width: max-content;
+      max-width: 230px;
+      padding: 11px 14px 12px;
+      background: rgb(7,4,18);
+      color: #f5f5f7;
+      border-radius: 10px;
+      text-align: left;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity .15s ease, transform .15s ease, visibility .15s;
+      z-index: 10;
+    }
+    .bubble::before {
+      content: "";
+      position: absolute;
+      left: -5px;
+      top: 50%;
+      width: 10px;
+      height: 10px;
+      background: rgb(7,4,18);
+      transform: translateY(-50%) rotate(45deg);
+      border-radius: 2px;
+    }
+    .bubble b {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0;
+      margin-bottom: 4px;
+    }
+    .bubble span {
+      display: block;
+      font-size: 12px;
+      font-weight: 400;
+      line-height: 1.5;
+      color: #c9c6d8;
+      letter-spacing: 0.01em;
+    }
+    .info:hover .bubble,
+    .info:focus .bubble {
+      opacity: 1;
+      visibility: visible;
+      transform: translate(0, -50%);
+    }
+  </style>
+</head>
+<body>
+  <ul>
+    <li>
+      <span class="mark"><span class="num">1</span></span>
+      User seat
+    </li>
+    <li>
+      <span class="mark"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 4.5"/></svg></span>
+      Future updates
+      <button class="info" type="button" aria-label="About updates">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.2v4" stroke-linecap="round"/><circle cx="8" cy="5" r=".4" fill="currentColor"/></svg>
+        <span class="bubble" role="tooltip"><b>Future updates</b><span>Free updates are included with your purchase.</span></span>
+      </button>
+    </li>
+    <li>
+      <span class="mark"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 4.5"/></svg></span>
+      Commercial use
+      <button class="info" type="button" aria-label="About commercial use">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.2v4" stroke-linecap="round"/><circle cx="8" cy="5" r=".4" fill="currentColor"/></svg>
+        <span class="bubble" role="tooltip"><b>Commercial use</b><span>Use your renders in client and commercial projects.</span></span>
+      </button>
+    </li>
+    <li>
+      <span class="mark"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 4.5"/></svg></span>
+      Support
+    </li>
+    <li>
+      <span class="mark"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 4.5"/></svg></span>
+      30 day refund
+    </li>
+    <li>
+      <span class="mark"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 4.5"/></svg></span>
+      Upgrade anytime
+      <button class="info" type="button" aria-label="About upgrading">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.2v4" stroke-linecap="round"/><circle cx="8" cy="5" r=".4" fill="currentColor"/></svg>
+        <span class="bubble" role="tooltip"><b>Upgrade anytime</b><span>Start with any package and upgrade at any time. Simply pay the difference between your current package and the package you&rsquo;d like to move to.</span></span>
+      </button>
+    </li>
+  </ul>
+</body>
+</html>
