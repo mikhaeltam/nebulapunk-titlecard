@@ -409,13 +409,14 @@ const PX_WORLD  = (2 * CAM_Z_REF * Math.tan(22.5 * Math.PI/180)) / 640;
 const VIEW_W = Math.max(320, window.innerWidth  || 1100);
 const VIEW_H = Math.max(320, window.innerHeight || 640);
 // star count scales with frame AREA so density stays the same (450 per 1100x640)
-const STAR_COUNT = Math.round(Math.min(1120, Math.max(175, 315 * (VIEW_W*VIEW_H) / (1100*640))));   // 30% fewer
+const STAR_COUNT = Math.round(Math.min(1290, Math.max(200, 362 * (VIEW_W*VIEW_H) / (1100*640))));
 const starGeom = new THREE.BufferGeometry();
 const starPos   = new Float32Array(STAR_COUNT * 3);
 const starColor = new Float32Array(STAR_COUNT * 3);
 const starSize  = new Float32Array(STAR_COUNT);
 const starDOF   = new Float32Array(STAR_COUNT); // depth-from-focus 0..1 (updated per frame)
 const starHalo  = new Float32Array(STAR_COUNT); // 1 = this star has a soft glow
+const starHover = new Float32Array(STAR_COUNT); // 0 idle → 1 under the cursor (eased)
 for(let i=0;i<STAR_COUNT;i++) starHalo[i] = Math.random() < 0.04 ? 1 : 0;
 const starData  = [];
 
@@ -476,6 +477,7 @@ starGeom.setAttribute('color',    new THREE.BufferAttribute(starColor, 3));
 starGeom.setAttribute('aSize',    new THREE.BufferAttribute(starSize, 1));
 starGeom.setAttribute('aDOF',     new THREE.BufferAttribute(starDOF, 1));
 starGeom.setAttribute('aHalo',    new THREE.BufferAttribute(starHalo, 1));
+starGeom.setAttribute('aHover',   new THREE.BufferAttribute(starHover, 1));
 
 // ---- Build FIXED constellation pairs (screen-space, tight, sparse) ----
 // Goal: small mini-constellations of 2-5 stars each, scattered across the field.
@@ -681,6 +683,8 @@ const starMat = new THREE.ShaderMaterial({
     attribute float aSize;
     attribute float aDOF;       // 0 = in focus, 1 = max blur
     attribute float aHalo;
+    attribute float aHover;
+    varying float vOpacity;
     varying vec3 vColor;
     varying float vDOF;
     varying float vHalo;
@@ -690,6 +694,7 @@ const starMat = new THREE.ShaderMaterial({
       vColor = color;
       vDOF = aDOF;
       vHalo = aHalo;
+      vOpacity = mix(0.72, 1.0, aHover);   // idle stars softer; hovered stars full strength
       vec4 mv = modelViewMatrix * vec4(position,1.0);
       gl_Position = projectionMatrix * mv;
       // base size scales with distance (real perspective).
@@ -707,6 +712,7 @@ const starMat = new THREE.ShaderMaterial({
     varying float vDOF;
     varying float vHalo;
     varying float vNear;
+    varying float vOpacity;
     void main(){
       vec2 uv = gl_PointCoord - vec2(0.5);
       float d = length(uv);
@@ -714,7 +720,7 @@ const starMat = new THREE.ShaderMaterial({
         // sprite is 5x larger: core occupies the inner 1/5, soft glow fills the rest
         float core = pow(smoothstep(0.10, 0.0, d), 1.4) * mix(1.0, 0.25, vDOF);
         float glow = exp(-d*d*22.0) * 0.08 * (1.0 - vDOF);   // no glow on blurred stars
-        gl_FragColor = vec4(vColor, max(core, glow) * (1.0 - vNear*0.85) * 0.72);
+        gl_FragColor = vec4(vColor, max(core, glow) * (1.0 - vNear*0.85) * vOpacity);
         return;
       }
       // In-focus: hard edge at d=0.5, soft inner; Out-of-focus: very soft edge,
@@ -726,7 +732,7 @@ const starMat = new THREE.ShaderMaterial({
       // blurred stars are much dimmer (light spread out), and very-near ones nearly vanish
       float peak = mix(1.0, 0.18, vDOF) * (1.0 - vNear*0.85);
       a = pow(a, 1.4) * peak;
-      gl_FragColor = vec4(vColor, a * 0.72);   // overall star opacity (easier on the eyes)
+      gl_FragColor = vec4(vColor, a * vOpacity);
     }
   `,
 });
@@ -1130,6 +1136,7 @@ function loop(){
 
     // Cursor proximity BRIGHTENS stars + SATURATES them. Brightness is an additive
     // boost; saturation is a push-from-grey (each channel deviates from the avg).
+    starHover[i] += (Math.min(1, prox * 1.6) - starHover[i]) * 0.08;
     const cursorBoost = prox * 0.35;
     const satBoost = prox * 0.6;
     const brightAdd = fluidIntensity * FLOW_BRIGHT * 0.4 + cursorBoost + glint * 0.55;
@@ -1154,6 +1161,7 @@ function loop(){
   starGeom.attributes.color.needsUpdate = true;
   starGeom.attributes.aSize.needsUpdate = true;
   starGeom.attributes.aDOF.needsUpdate = true;
+  starGeom.attributes.aHover.needsUpdate = true;
 
   // ---- Update constellation web ----
   // Lines are ALWAYS visible at a low ambient opacity so the constellations
@@ -1348,7 +1356,7 @@ function loop(){
   // astronomical chart. Centered to the LEFT. Nodes travel slowly along their rings,
   // and the whole diagram drifts a few pixels with the cursor for depth.
   {
-    const GOLD = '110,212,226';   // ring colour: soft cyan
+    const GOLD = '132,198,208';   // ring colour: muted cyan
     if(typeof window.__orb === 'undefined') window.__orb = { px:0, py:0 };
     const onCard = mouse.inside && mouse.x >= 0 && mouse.x <= W && mouse.y >= 0 && mouse.y <= H;
     const tx = onCard ? (mouse.x / W - 0.5) * -14 : 0;   // gentle parallax (±7px)
