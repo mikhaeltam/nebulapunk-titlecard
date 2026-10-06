@@ -714,7 +714,7 @@ const starMat = new THREE.ShaderMaterial({
         // sprite is 5x larger: core occupies the inner 1/5, soft glow fills the rest
         float core = pow(smoothstep(0.10, 0.0, d), 1.4) * mix(1.0, 0.25, vDOF);
         float glow = exp(-d*d*22.0) * 0.08 * (1.0 - vDOF);   // no glow on blurred stars
-        gl_FragColor = vec4(vColor, max(core, glow) * (1.0 - vNear*0.85));
+        gl_FragColor = vec4(vColor, max(core, glow) * (1.0 - vNear*0.85) * 0.72);
         return;
       }
       // In-focus: hard edge at d=0.5, soft inner; Out-of-focus: very soft edge,
@@ -726,7 +726,7 @@ const starMat = new THREE.ShaderMaterial({
       // blurred stars are much dimmer (light spread out), and very-near ones nearly vanish
       float peak = mix(1.0, 0.18, vDOF) * (1.0 - vNear*0.85);
       a = pow(a, 1.4) * peak;
-      gl_FragColor = vec4(vColor, a);
+      gl_FragColor = vec4(vColor, a * 0.72);   // overall star opacity (easier on the eyes)
     }
   `,
 });
@@ -1348,7 +1348,7 @@ function loop(){
   // astronomical chart. Centered to the LEFT. Nodes travel slowly along their rings,
   // and the whole diagram drifts a few pixels with the cursor for depth.
   {
-    const GOLD = '140,170,230';   // ring colour: soft star-chart blue
+    const GOLD = '110,212,226';   // ring colour: soft cyan
     if(typeof window.__orb === 'undefined') window.__orb = { px:0, py:0 };
     const onCard = mouse.inside && mouse.x >= 0 && mouse.x <= W && mouse.y >= 0 && mouse.y <= H;
     const tx = onCard ? (mouse.x / W - 0.5) * -14 : 0;   // gentle parallax (±7px)
