@@ -681,6 +681,7 @@ const starMat = new THREE.ShaderMaterial({
     varying vec3 vColor;
     varying float vDOF;
     varying float vHalo;
+    varying float vNear;
     uniform float uPxRatio;
     void main(){
       vColor = color;
@@ -690,22 +691,27 @@ const starMat = new THREE.ShaderMaterial({
       gl_Position = projectionMatrix * mv;
       // base size scales with distance (real perspective).
       // Out-of-focus stars get up to ~2.4x larger ("bokeh bloat").
-      float dofBloat = 1.0 + vDOF * 1.4;
-      gl_PointSize = aSize * uPxRatio * (12.0 / -mv.z) * dofBloat * (1.0 + aHalo * 4.0);
+      // Blurred stars bloat less than before, and nothing can grow into a huge blob
+      float dofBloat = 1.0 + vDOF * 0.8;
+      float sz = aSize * uPxRatio * (12.0 / -mv.z) * dofBloat * (1.0 + aHalo * (1.0 - aDOF) * 4.0);
+      gl_PointSize = min(sz, 18.0 * uPxRatio);
+      // 1 when the star is very close to the camera — those get faded right down
+      vNear = smoothstep(-2.6, -0.9, mv.z);
     }
   `,
   fragmentShader:`
     varying vec3 vColor;
     varying float vDOF;
     varying float vHalo;
+    varying float vNear;
     void main(){
       vec2 uv = gl_PointCoord - vec2(0.5);
       float d = length(uv);
       if(vHalo > 0.5){
         // sprite is 5x larger: core occupies the inner 1/5, soft glow fills the rest
-        float core = pow(smoothstep(0.10, 0.0, d), 1.4) * mix(1.0, 0.5, vDOF);
-        float glow = exp(-d*d*22.0) * 0.08;
-        gl_FragColor = vec4(vColor, max(core, glow));
+        float core = pow(smoothstep(0.10, 0.0, d), 1.4) * mix(1.0, 0.25, vDOF);
+        float glow = exp(-d*d*22.0) * 0.08 * (1.0 - vDOF);   // no glow on blurred stars
+        gl_FragColor = vec4(vColor, max(core, glow) * (1.0 - vNear*0.85));
         return;
       }
       // In-focus: hard edge at d=0.5, soft inner; Out-of-focus: very soft edge,
@@ -714,7 +720,8 @@ const starMat = new THREE.ShaderMaterial({
       float edgeStart = mix(0.0, 0.15, vDOF);
       float a = smoothstep(0.5, edgeStart, d);
       // dim peak alpha when far from focus (light is dispersed)
-      float peak = mix(1.0, 0.45, vDOF);
+      // blurred stars are much dimmer (light spread out), and very-near ones nearly vanish
+      float peak = mix(1.0, 0.18, vDOF) * (1.0 - vNear*0.85);
       a = pow(a, 1.4) * peak;
       gl_FragColor = vec4(vColor, a);
     }
