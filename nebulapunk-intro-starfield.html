@@ -8,7 +8,7 @@
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body {
     width:100%; height:100%; margin:0; overflow:hidden;
-    background:#232838;
+    background:#1c2030;
     font-family:'Trebuchet MS',Arial,Helvetica,sans-serif;
   }
 
@@ -18,7 +18,7 @@
     padding:0;
     height:100%;
     text-align:center;
-    background:#232838;
+    background:#1c2030;
   }
 
   #hero {
@@ -1348,7 +1348,7 @@ function loop(){
   // astronomical chart. Centered to the LEFT. Nodes travel slowly along their rings,
   // and the whole diagram drifts a few pixels with the cursor for depth.
   {
-    const GOLD = '214,192,148';
+    const GOLD = '140,170,230';   // ring colour: soft star-chart blue
     if(typeof window.__orb === 'undefined') window.__orb = { px:0, py:0 };
     const onCard = mouse.inside && mouse.x >= 0 && mouse.x <= W && mouse.y >= 0 && mouse.y <= H;
     const tx = onCard ? (mouse.x / W - 0.5) * -14 : 0;   // gentle parallax (±7px)
@@ -1392,35 +1392,29 @@ function loop(){
       const ang = ph + t * sp;
       const nx = cx + ox*S + Math.cos(ang) * r*S;
       const ny = cy + oy*S + Math.sin(ang) * r*S;
-      const halo = octx.createRadialGradient(nx, ny, 0, nx, ny, sz*5);
-      halo.addColorStop(0, `rgba(${GOLD},0.35)`);
-      halo.addColorStop(1, `rgba(${GOLD},0)`);
-      octx.fillStyle = halo;
-      octx.beginPath(); octx.arc(nx, ny, sz*5, 0, Math.PI*2); octx.fill();
-      octx.fillStyle = `rgba(236,220,186,0.95)`;
-      octx.beginPath(); octx.arc(nx, ny, sz, 0, Math.PI*2); octx.fill();
+      const ringA = rings[ri][3];
+      octx.fillStyle = `rgba(${GOLD},${Math.min(1, ringA * 1.6 + 0.08).toFixed(3)})`;   // slightly brighter than its ring
+      octx.beginPath(); octx.arc(nx, ny, sz * 0.8, 0, Math.PI*2); octx.fill();
     }
     // center point
-    octx.fillStyle = `rgba(236,220,186,0.8)`;
+    octx.fillStyle = `rgba(${GOLD},0.6)`;
     octx.beginPath(); octx.arc(cx, cy, 2.2, 0, Math.PI*2); octx.fill();
     octx.restore();
   }
 
-  // HORIZON (seen from space): a curved, soft blue atmosphere band. Its crest sits at
-  // HORIZON_Y (fraction of height) — around the "Breathe Magic" heading in the card.
+  // HORIZON: a flat, subtle band of atmospheric blue where space meets the white.
+  // Crest sits at HORIZON_Y (fraction of height), around the "Breathe Magic" heading.
   const HORIZON_Y = 0.53;
   {
-    const R  = Math.max(W * 1.8, H * 1.2);           // big planet radius → gentle curve
-    const cx = W / 2, cy = H * HORIZON_Y + R;        // circle top touches the horizon line
-    const lg = octx.createRadialGradient(cx, cy, R * 0.86, cx, cy, R * 1.07);
-    // stops run from inside the planet (below horizon) out into space (above)
-    lg.addColorStop(0.00, 'rgba(170,205,255,0)');
-    lg.addColorStop(0.45, 'rgba(150,190,255,0.20)');
-    lg.addColorStop(0.62, 'rgba(120,170,255,0.50)');   // ≈ horizon line: brightest blue
-    lg.addColorStop(0.72, 'rgba(95,140,245,0.26)');    // thin glow lifting into space
-    lg.addColorStop(0.86, 'rgba(80,115,230,0.06)');
-    lg.addColorStop(1.00, 'rgba(80,115,230,0)');
-    octx.fillStyle = lg;
+    const hz = octx.createLinearGradient(0, H * (HORIZON_Y - 0.10), 0, H * (HORIZON_Y + 0.12));
+    const STEPS = 24;
+    for(let k=0;k<=STEPS;k++){
+      const u = k/STEPS;                                   // 0 = above (space) → 1 = below
+      const x = (u - 0.45) / 0.45;                         // peak a little above centre
+      const a = 0.22 * Math.exp(-x*x*2.2);                 // soft bell, no hard edges
+      hz.addColorStop(u, `rgba(120,155,220,${a.toFixed(4)})`);
+    }
+    octx.fillStyle = hz;
     octx.fillRect(0, 0, W, H);
   }
 
