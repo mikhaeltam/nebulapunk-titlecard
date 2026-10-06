@@ -24,7 +24,7 @@
   #hero {
     position:relative;
     width:100%;
-    height:100vh;      /* = the iframe's height when embedded */
+    min-height:100vh;  /* at least the iframe's height; grows to fit the content */
     margin:0;
     overflow:hidden;
   }
@@ -45,6 +45,12 @@
     pointer-events:none;
   }
   #three-canvas { z-index:2; }
+  #hero-content {
+    position:relative;
+    z-index:4;          /* sits on top of the stars + fade */
+    width:100%;
+    font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;
+  }
   #overlay      { z-index:3; }
 
   .hero-content {
@@ -336,6 +342,23 @@
   <div id="hero">
     <canvas id="three-canvas"></canvas>
     <canvas id="overlay"></canvas>
+    <div id="hero-content">
+<h2 style="text-align:center;"><span style="font-weight:normal;"><br></span></h2>
+<h2 style="text-align:center;"><span style="font-weight:normal;"><br></span></h2>
+<div style="width:75%;margin:48px auto 0 auto;border-radius:22px;overflow:hidden;background:rgb(7,4,18);line-height:1;">  <img src="https://assets.superhivemarket.com/cache/3897d6b1241b8b73fff2611d767cbfd3.gif" width="100%" style="display:block;width:100%;max-width:100%;">  <div style="margin-top:-56.25%;height:0;padding-bottom:56.25%;">    <div style="padding-bottom:28.125%;line-height:0;font-size:0;">&nbsp;</div>
+    <div style="margin-top:-22px;text-align:center;padding-left:0.1em;font-family:Inter , 'Helvetica Neue' , Helvetica , Arial , sans-serif;font-size:36px;font-weight:600;letter-spacing:0.1em;color:#f5f5f7;line-height:1.2;">NEBULAPUNK</div>
+  </div>
+</div>
+<h2 style="text-align:center;"><span style="font-weight:normal;"><br></span></h2>
+<div style="height:32px;line-height:0;font-size:0;">&nbsp;</div>
+<div style="width:100%;margin:0 0 48px 0;padding:0;">  <p style="font-family:Inter , 'Helvetica Neue' , Helvetica , Arial , sans-serif;margin:0;padding:0;font-size:12px;font-weight:400;color:#8d8aa6;letter-spacing:0.01em;line-height:1.6;text-align:center;">Built to challenge conventional workflows, Nebulapunk takes a radically<br>different approach centered on one thing:</p>
+  <p style="font-family:Inter , 'Helvetica Neue' , Helvetica , Arial , sans-serif;margin:18px 0 0 0;padding:0;font-size:12px;font-weight:400;color:#8d8aa6;letter-spacing:0.01em;line-height:1.6;text-align:center;">Artistic Freedom.</p>
+  <p style="font-family:Inter , 'Helvetica Neue' , Helvetica , Arial , sans-serif;margin:18px 0 0 0;padding:0;font-size:12px;font-weight:400;color:#8d8aa6;letter-spacing:0.01em;line-height:1.6;text-align:center;">This is nebula and hologram reinvented.</p>
+</div>
+<h2 style="text-align:center;"><span style="font-weight:normal;"><br></span></h2>
+<h2 style="text-align:center;"><span style="font-weight:normal;"><br></span></h2>
+<h2 style="text-align:center;"><span style="font-weight:normal;"><br></span></h2>
+    </div>
   </div>
 </div>
 
