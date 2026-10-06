@@ -409,7 +409,7 @@ const PX_WORLD  = (2 * CAM_Z_REF * Math.tan(22.5 * Math.PI/180)) / 640;
 const VIEW_W = Math.max(320, window.innerWidth  || 1100);
 const VIEW_H = Math.max(320, window.innerHeight || 640);
 // star count scales with frame AREA so density stays the same (450 per 1100x640)
-const STAR_COUNT = Math.round(Math.min(1600, Math.max(250, 450 * (VIEW_W*VIEW_H) / (1100*640))));
+const STAR_COUNT = Math.round(Math.min(1120, Math.max(175, 315 * (VIEW_W*VIEW_H) / (1100*640))));   // 30% fewer
 const starGeom = new THREE.BufferGeometry();
 const starPos   = new Float32Array(STAR_COUNT * 3);
 const starColor = new Float32Array(STAR_COUNT * 3);
@@ -1371,13 +1371,15 @@ function loop(){
       [ 0.14,  0.10, 0.24, 0.46],
       [-0.06,  0.26, 0.40, 0.32],
     ];
+    octx.lineWidth = 1.5;                           // slightly thicker rings
     for(const [ox, oy, r, a] of rings){
       octx.beginPath();
       octx.arc(cx + ox*S, cy + oy*S, r*S, 0, Math.PI*2);
       octx.strokeStyle = `rgba(${GOLD},${a})`;
       octx.stroke();
     }
-    // two long hairlines crossing the center
+    // two long hairlines crossing the center (kept at 1px)
+    octx.lineWidth = 1;
     octx.strokeStyle = `rgba(${GOLD},0.24)`;
     octx.beginPath(); octx.moveTo(cx - 1.1*S, cy + 0.42*S); octx.lineTo(cx + 1.4*S, cy - 0.54*S); octx.stroke();
     octx.beginPath(); octx.moveTo(cx - 0.3*S, cy - 1.2*S); octx.lineTo(cx + 0.38*S, cy + 1.5*S); octx.stroke();
