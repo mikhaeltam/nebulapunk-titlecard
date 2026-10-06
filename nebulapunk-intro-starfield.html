@@ -8,7 +8,7 @@
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body {
     width:100%; height:100%; margin:0; overflow:hidden;
-    background:#2b2b2b;
+    background:#06060d;
     font-family:'Trebuchet MS',Arial,Helvetica,sans-serif;
   }
 
@@ -18,7 +18,7 @@
     padding:0;
     height:100%;
     text-align:center;
-    background:#2b2b2b;
+    background:#06060d;
   }
 
   #hero {
@@ -401,7 +401,15 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 //  LAYER A — 3D star field (Three.js Points, drifting in 3D)
 //  Background stars only. Vivid palette, twinkles.
 // ============================================================
-const STAR_COUNT = 450; // more stars for richer night-sky density
+// Constant scale: one world unit = the same number of pixels at any iframe size
+// (reference: 640px tall). The camera FOV is adjusted in sizeAll() to keep this true,
+// so a tall card shows MORE sky instead of stretching the same stars further apart.
+const CAM_Z_REF = 3.5;
+const PX_WORLD  = (2 * CAM_Z_REF * Math.tan(22.5 * Math.PI/180)) / 640;
+const VIEW_W = Math.max(320, window.innerWidth  || 1100);
+const VIEW_H = Math.max(320, window.innerHeight || 640);
+// star count scales with frame AREA so density stays the same (450 per 1100x640)
+const STAR_COUNT = Math.round(Math.min(1600, Math.max(250, 450 * (VIEW_W*VIEW_H) / (1100*640))));
 const starGeom = new THREE.BufferGeometry();
 const starPos   = new Float32Array(STAR_COUNT * 3);
 const starColor = new Float32Array(STAR_COUNT * 3);
@@ -412,15 +420,17 @@ for(let i=0;i<STAR_COUNT;i++) starHalo[i] = Math.random() < 0.04 ? 1 : 0;
 const starData  = [];
 
 // Volume extents (world units) — wider z for dramatic depth & DOF
-const VOL_X = 5.0, VOL_Y = 2.5, VOL_Z = 6.5;
+const VOL_Z = 6.5;
+const HALF_W0 = VIEW_W/2 * PX_WORLD, HALF_H0 = VIEW_H/2 * PX_WORLD; // visible half-size at z=0
+const VOL_X = HALF_W0 * 2.0, VOL_Y = HALF_H0 * 1.72;                // kept for any legacy use
 for(let i=0;i<STAR_COUNT;i++){
-  // gaussian-ish toward center
-  const gx = (Math.random()+Math.random()+Math.random())/3 - 0.5;
-  const gy = (Math.random()+Math.random()+Math.random())/3 - 0.5;
+  // depth first, then spread x/y EVENLY across what's visible at that depth
+  // (plus a small margin so drifting stars don't leave empty edges)
   const gz = (Math.random()+Math.random())/2 - 0.5;
-  const bx = gx * VOL_X * 2.0;
-  const by = gy * VOL_Y * 2.0;
   const bz = gz * VOL_Z * 2.0;
+  const depthScale = Math.max(0.3, (CAM_Z_REF - bz) / CAM_Z_REF);
+  const bx = (Math.random()*2-1) * HALF_W0 * depthScale * 1.12;
+  const by = (Math.random()*2-1) * HALF_H0 * depthScale * 1.12;
   starPos[i*3+0] = bx;
   starPos[i*3+1] = by;
   starPos[i*3+2] = bz;
@@ -521,6 +531,7 @@ function buildConstellationPairs(){
 
   function addPair(ai, bi){
     if(ai === bi) return false;
+    if(constellationPairs.length >= MAX_PAIRS) return false;
     if(counts[ai] >= capOf(ai) || counts[bi] >= capOf(bi)) return false;
     const key = ai < bi ? ai+':'+bi : bi+':'+ai;
     if(seen.has(key)) return false;
@@ -585,7 +596,7 @@ function buildConstellationPairs(){
 
 // Pre-allocate buffers for the constellation web using a safe MAX ceiling
 // (actual pair count will be set at sizeAll() time and re-init colors then).
-const MAX_PAIRS = 2200; // safe upper bound: STAR_COUNT (750) * CAP_HUB (5) / 2 + buffer
+const MAX_PAIRS = Math.ceil(STAR_COUNT * 2.6) + 64; // worst case: every star at hub cap
 let pairCount = 0; // runtime: set by buildConstellationPairs() / refreshPairBuffers()
 const pairWebPos   = new Float32Array(MAX_PAIRS * 2 * 3);
 const pairWebAlpha = new Float32Array(MAX_PAIRS * 2);
@@ -714,7 +725,7 @@ scene.add(starPoints);
 
 // ---- Star constellation web ----
 // Dynamic LineSegments: rebuilt per frame from cursor-proximate stars.
-const MAX_WEB_SEGMENTS = 2200; // safe ceiling: matches MAX_PAIRS
+const MAX_WEB_SEGMENTS = MAX_PAIRS;
 const webPos   = new Float32Array(MAX_WEB_SEGMENTS * 2 * 3);
 const webAlpha = new Float32Array(MAX_WEB_SEGMENTS * 2);
 const webCol   = new Float32Array(MAX_WEB_SEGMENTS * 2 * 3);
@@ -893,6 +904,7 @@ function sizeAll(){
   W = hero.offsetWidth;
   H = hero.offsetHeight;
   camera.aspect = W/H;
+  camera.fov = 2 * Math.atan((H * PX_WORLD) / (2 * CAM_Z_REF)) * 180/Math.PI;
   camera.updateProjectionMatrix();
   renderer.setSize(W, H, false);
   ov.width = W; ov.height = H;
