@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nebulapunk Intro — Prototype</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body {
+    width:100%; height:100%; margin:0; overflow:hidden;
+    background:#dedede;
+    font-family:'Trebuchet MS',Arial,Helvetica,sans-serif;
+  }
+
+  #intro {
+    position:relative;
+    width:100%;
+    padding:0;
+    height:100%;
+    text-align:center;
+    background:#dedede;
+  }
+
+  #hero {
+    position:relative;
+    width:100%;
+    height:100vh;      /* = the iframe's height when embedded */
+    margin:0;
+    overflow:hidden;
+  }
+  #liquid-fluid {
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    z-index:1;
+    overflow:hidden;
+  }
+  #liquid-fluid canvas {
+    display:block;
+    width:100% !important;
+    height:100% !important;
+  }
+  #three-canvas, #overlay {
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    pointer-events:none;
+  }
+  #three-canvas { z-index:2; }
+  #overlay      { z-index:3; }
+
+  .hero-content {
+    position:relative;
+    z-index:4;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    text-align:center;
+  }
+  .wordmark {
+    position:relative;
+    z-index:4;
+    font-family:'Inter','Helvetica Neue',Helvetica,Arial,sans-serif;
+    font-size:28px;
+    font-weight:600;
+    letter-spacing:-0.02em;
+    line-height:1.2;
+    color:#f5f5f7;
+    -webkit-text-fill-color:#f5f5f7;
+    margin:0;
+    pointer-events:none;
+    /* faint shadow keeps the light text legible over the grey field */
+    text-shadow:0 1px 10px rgba(30,24,60,0.35);
+  }
+  .hero-gif {
+    text-align:center;
+    margin:48px 0;
+    line-height:0;
+    font-size:0;
+  }
+  .hero-gif img {
+    display:inline-block;
+    max-width:100%;
+    height:auto;
+    border-radius:22px;
+  }
+  .hero-sub {
+    font-family:'Inter','Helvetica Neue',Helvetica,Arial,sans-serif;
+    font-size:13px;
+    font-weight:400;
+    letter-spacing:0.01em;
+    line-height:1.6;
+    color:#d6d3e0;
+    max-width:430px;
+    margin:0 auto;
+    text-shadow:0 1px 8px rgba(30,24,60,0.35);
+  }
+  /* Subtle breath — imperceptibly slow scale + vertical bob with stops that don't
+     align symmetrically, so the motion never feels metronome-like. */
+  @keyframes wordmarkBreath {
+    0%   { transform: scale(1.000) translateY(0px); }
+    27%  { transform: scale(1.010) translateY(-2px); }
+    52%  { transform: scale(1.005) translateY(-3px); }
+    78%  { transform: scale(1.012) translateY(-1px); }
+    100% { transform: scale(1.000) translateY(0px); }
+  }
+  .tagline-hero {
+    position:relative;
+    z-index:4;
+    font-family:'Franklin Gothic Medium','Arial Narrow',Arial,sans-serif;
+    font-size:1.3rem; font-weight:900; letter-spacing:0.02em;
+    color:#1a1a22; line-height:1.2;
+    pointer-events:none;
+  }
+
+  /* Ambient gradient — same treatment for tagline and thesis line.
+     Two overlapping linear gradients at different angles + speeds combine into a
+     slow drifting "noise" feel, low contrast, never repeats exactly. */
+  /* Ambient NOISE gradient — stacked animated radial blobs at different positions,
+     sizes, and animation speeds. The overlap produces organic, never-repeating
+     "noise" without needing SVG filters or canvas. Essentially free at the GPU level.
+     Yellow replaces the cold blue for warm/cool contrast. */
+  .ambient-grad {
+    -webkit-text-stroke: 0 transparent;
+    text-decoration: none;
+    background-image:
+      radial-gradient(circle at 15% 30%, #a855f7 0%, rgba(168,85,247,1) 10%, rgba(168,85,247,0.6) 24%, rgba(168,85,247,0.25) 38%, rgba(168,85,247,0) 56%),
+      radial-gradient(circle at 70% 20%, #ffd84d 0%, rgba(255,216,77,1) 12%, rgba(255,216,77,0.6) 26%, rgba(255,216,77,0.25) 42%, rgba(255,216,77,0) 62%),
+      radial-gradient(circle at 85% 75%, #6D28D9 0%, rgba(109,40,217,1) 11%, rgba(109,40,217,0.6) 26%, rgba(109,40,217,0.25) 40%, rgba(109,40,217,0) 60%),
+      radial-gradient(circle at 25% 85%, #10E6A0 0%, rgba(16,230,160,1) 13%, rgba(16,230,160,0.6) 28%, rgba(16,230,160,0.25) 44%, rgba(16,230,160,0) 64%),
+      radial-gradient(circle at 55% 50%, #c084fc 0%, rgba(192,132,252,1) 9%,  rgba(192,132,252,0.6) 22%, rgba(192,132,252,0.25) 34%, rgba(192,132,252,0) 52%),
+      radial-gradient(circle at 5%  60%, #00d4c8 0%, rgba(0,212,200,1) 11%, rgba(0,212,200,0.6) 24%, rgba(0,212,200,0.25) 38%, rgba(0,212,200,0) 56%),
+      radial-gradient(circle at 95% 40%, #3A0E80 0%, rgba(58,14,128,1) 11%, rgba(58,14,128,0.6) 25%, rgba(58,14,128,0.25) 40%, rgba(58,14,128,0) 58%),
+      radial-gradient(circle at 40% 10%, #ffd84d 0%, rgba(255,216,77,1) 10%, rgba(255,216,77,0.6) 23%, rgba(255,216,77,0.25) 36%, rgba(255,216,77,0) 54%),
+      linear-gradient(45deg,
+        #3A0E80 0%, #4a1796 25%, #5d20b0 50%, #6D28D9 75%, #3A0E80 100%);
+    background-size:
+      220% 220%, 180% 180%, 260% 260%, 200% 200%,
+      150% 150%, 240% 240%, 190% 190%, 170% 170%,
+      100% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    animation: noiseDrift1 48s linear infinite, noiseDrift2 70s linear infinite reverse;
+  }
+  /* Two drift animations that move different blob layers at different rates,
+     so the noise pattern never repeats. */
+
+  /* Dedicated wordmark gradient — tuned so that when blended via
+     `mix-blend-mode: difference` against the live field, the result reads as
+     YELLOW STARS on BLUE/PURPLE SPACE.
+     Strategy:
+       - Base layer: blue-purple linear gradient. When `difference`'d against the
+         field's violet/teal field, this lands in dark blue-purple range.
+       - Hotspot layer: bright yellow/cream radial dots. When `difference`'d
+         against any field color, these produce high-difference bright pixels
+         that, after the hue-rotate filter, land in the yellow range.
+     The filter applied to the wordmark then nudges everything to the final palette. */
+  .wordmark-grad {
+    -webkit-text-stroke: 0 transparent;
+    text-decoration: none;
+    background-image:
+      /* Bright yellow/cream "star" hotspots on top */
+      radial-gradient(circle at 18% 30%, #ffe78a 0%, rgba(255,231,138,1) 8%,  rgba(255,231,138,0.6) 18%, rgba(255,231,138,0.25) 30%, rgba(255,231,138,0) 46%),
+      radial-gradient(circle at 72% 22%, #fff4b0 0%, rgba(255,244,176,1) 7%,  rgba(255,244,176,0.6) 17%, rgba(255,244,176,0.25) 28%, rgba(255,244,176,0) 44%),
+      radial-gradient(circle at 88% 70%, #ffd860 0%, rgba(255,216,96,1) 9%,   rgba(255,216,96,0.6) 20%, rgba(255,216,96,0.25) 34%, rgba(255,216,96,0) 50%),
+      radial-gradient(circle at 28% 80%, #ffe78a 0%, rgba(255,231,138,1) 8%,  rgba(255,231,138,0.6) 18%, rgba(255,231,138,0.25) 30%, rgba(255,231,138,0) 46%),
+      /* Color blobs underneath — give the base layer chromatic variety so the
+         difference blend lands in vibrant colors regardless of field state */
+      radial-gradient(circle at 55% 55%, #a855f7 0%, rgba(168,85,247,1) 9%,  rgba(168,85,247,0.6) 22%, rgba(168,85,247,0.25) 36%, rgba(168,85,247,0) 54%),
+      radial-gradient(circle at 8%  62%, #6D28D9 0%, rgba(109,40,217,1) 10%, rgba(109,40,217,0.6) 24%, rgba(109,40,217,0.25) 38%, rgba(109,40,217,0) 56%),
+      radial-gradient(circle at 92% 40%, #c084fc 0%, rgba(192,132,252,1) 9%, rgba(192,132,252,0.6) 22%, rgba(192,132,252,0.25) 36%, rgba(192,132,252,0) 54%),
+      radial-gradient(circle at 40% 12%, #00d4c8 0%, rgba(0,212,200,1) 10%,  rgba(0,212,200,0.6) 23%, rgba(0,212,200,0.25) 38%, rgba(0,212,200,0) 56%),
+      /* Multi-color base — keeps full pixel coverage with chromatic variation */
+      linear-gradient(45deg,
+        #ffd84d 0%,
+        #a855f7 25%,
+        #6D28D9 50%,
+        #00d4c8 75%,
+        #ffd84d 100%);
+    background-size:
+      220% 220%, 180% 180%, 260% 260%, 200% 200%,
+      150% 150%, 240% 240%, 190% 190%, 170% 170%,
+      100% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    animation: noiseDrift1 48s linear infinite, noiseDrift2 70s linear infinite reverse;
+  }
+
+  @keyframes noiseDrift1 {
+    0% {
+      background-position:
+        0% 0%, 0% 0%, 0% 0%, 0% 0%,
+        0% 0%, 0% 0%, 0% 0%, 0% 0%,
+        0% 0%;
+    }
+    100% {
+      background-position:
+        100% 50%, -80% 60%, 60% -90%, -120% 40%,
+        0% 0%, 0% 0%, 0% 0%, 0% 0%,
+        0% 0%;
+    }
+  }
+  @keyframes noiseDrift2 {
+    0% {
+      background-position:
+        0% 0%, 0% 0%, 0% 0%, 0% 0%,
+        0% 0%, 0% 0%, 0% 0%, 0% 0%,
+        0% 0%;
+    }
+    100% {
+      background-position:
+        0% 0%, 0% 0%, 0% 0%, 0% 0%,
+        -70% 80%, 90% -50%, -110% 30%, 50% 70%,
+        0% 0%;
+    }
+  }
+
+  /* Night-sky gradient for the title — deep navy field with bright pinprick
+     "star" highlights scattered through. Drifts slowly so the stars wander.
+     Inside the text feels like looking through the wordmark into the real cosmos. */
+  .night-sky-grad {
+    -webkit-text-stroke: 0;
+    background-image:
+      /* Bright "stars" — small radial hotspots */
+      radial-gradient(circle at 12% 22%, #ffffff 0%, rgba(255,255,255,0) 6%),
+      radial-gradient(circle at 78% 18%, #e0f5ff 0%, rgba(224,245,255,0) 5%),
+      radial-gradient(circle at 35% 70%, #ffe9a8 0%, rgba(255,233,168,0) 4%),
+      radial-gradient(circle at 88% 62%, #ffffff 0%, rgba(255,255,255,0) 5%),
+      radial-gradient(circle at 55% 35%, #c8e0ff 0%, rgba(200,224,255,0) 4%),
+      radial-gradient(circle at 22% 85%, #ffffff 0%, rgba(255,255,255,0) 5%),
+      radial-gradient(circle at 68% 90%, #d0f0ff 0%, rgba(208,240,255,0) 4%),
+      radial-gradient(circle at 92% 30%, #ffffff 0%, rgba(255,255,255,0) 4%),
+      /* Nebula highlights — soft larger plum/violet blooms */
+      radial-gradient(circle at 25% 40%, #3a1f5a 0%, rgba(58,31,90,0) 40%),
+      radial-gradient(circle at 75% 55%, #2a1850 0%, rgba(42,24,80,0) 45%),
+      radial-gradient(circle at 50% 75%, #1f1455 0%, rgba(31,20,85,0) 38%),
+      /* Deep base */
+      linear-gradient(35deg, #0a0e2c, #1a0e3a 50%, #08071f);
+    background-size:
+      280% 280%, 240% 240%, 260% 260%, 220% 220%,
+      300% 300%, 250% 250%, 270% 270%, 290% 290%,
+      180% 180%, 200% 200%, 190% 190%,
+      100% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    animation: nightSkyDrift1 45s linear infinite, nightSkyDrift2 67s linear infinite reverse;
+  }
+  @keyframes nightSkyDrift1 {
+    0% {
+      background-position:
+        0% 0%, 0% 0%, 0% 0%, 0% 0%,
+        0% 0%, 0% 0%, 0% 0%, 0% 0%,
+        0% 0%, 0% 0%, 0% 0%,
+        0% 0%;
+    }
+    100% {
+      background-position:
+        180% 40%, -120% 60%, 90% -100%, -150% 80%,
+        110% 50%, -90% 120%, 130% -60%, -110% 40%,
+        0% 0%, 0% 0%, 0% 0%,
+        0% 0%;
+    }
+  }
+  @keyframes nightSkyDrift2 {
+    0% {
+      background-position:
+        0% 0%, 0% 0%, 0% 0%, 0% 0%,
+        0% 0%, 0% 0%, 0% 0%, 0% 0%,
+        0% 0%, 0% 0%, 0% 0%,
+        0% 0%;
+    }
+    100% {
+      background-position:
+        0% 0%, 0% 0%, 0% 0%, 0% 0%,
+        0% 0%, 0% 0%, 0% 0%, 0% 0%,
+        140% -80%, -120% 70%, 90% 110%,
+        0% 0%;
+    }
+  }
+
+  .tagline {
+    font-family:'Franklin Gothic Medium','Arial Narrow',Arial,sans-serif;
+    font-size:1.3rem; font-weight:900; letter-spacing:0.02em;
+    line-height:1.2;
+    margin-top:6px; margin-bottom:34px;
+  }
+  /* Static gradient for the tagline — no animation, no text outline,
+     high contrast with deep dark values for impact. */
+  .static-grad {
+    -webkit-text-stroke: 0 transparent;
+    text-decoration: none;
+    background-image: linear-gradient(
+      92deg,
+      #050420 0%,
+      #2a0a6a 18%,
+      #6814b0 38%,
+      #0f0a4a 58%,
+      #1a8060 78%,
+      #050420 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+  .sub {
+    font-family:'Franklin Gothic Medium','Arial Narrow',Arial,sans-serif;
+    font-size:14px; font-weight:400; color:#55555f;
+    line-height:1.6; letter-spacing:0.03em;
+    max-width:520px; margin:34px auto 6px auto;
+  }
+  .sub.second { margin-top:0; }
+  .thesis {
+    font-family:'Franklin Gothic Medium','Arial Narrow',Arial,sans-serif;
+    font-size:14px; font-weight:700;
+    letter-spacing:0.03em; line-height:1.6; margin-bottom:6px;
+  }
+  .thesis .thesis-text {
+    /* match the subtext color exactly */
+    color:#55555f;
+  }
+  .thesis .br {
+    /* brackets only — gradient comes from .ambient-grad applied alongside */
+    display:inline-block;
+    font-weight:900;
+  }
+</style>
+</head>
+<body>
+
+<div id="intro">
+  <div id="hero">
+    <canvas id="three-canvas"></canvas>
+    <canvas id="overlay"></canvas>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+// ============================================================
+//  Pointer + hover state
+// ============================================================
+const hero = document.getElementById('hero');
+const tc   = document.getElementById('three-canvas');
+const ov   = document.getElementById('overlay');
+const octx = ov.getContext('2d');
+
+const mouse = { x:-9999, y:-9999, sx:0, sy:0, inside:false, ndcX:0, ndcY:0 };
+let hoverStr = 0;
+
+hero.addEventListener('mousemove', e=>{
+  const r = hero.getBoundingClientRect();
+  mouse.x = e.clientX - r.left;
+  mouse.y = e.clientY - r.top;
+  mouse.ndcX = (mouse.x / r.width)*2 - 1;
+  mouse.ndcY = -(mouse.y / r.height)*2 + 1;
+});
+hero.addEventListener('mouseenter', ()=>{ mouse.inside = true; });
+hero.addEventListener('mouseleave', ()=>{
+  mouse.inside = false; mouse.x = -9999; mouse.y = -9999;
+});
+
+// ============================================================
+//  Palette helpers
+// ============================================================
+// Less saturated, brighter star palette — pale tinted whites with stronger
+// color hints. Slightly more saturated than the previous near-white version
+// so stars carry visible color identity while staying luminous.
+const PAL = [
+  [170, 155, 240],  // pale violet
+  [190, 165, 246],  // pale lavender
+  [164, 184, 241],  // misty periwinkle
+  [166, 191, 245],  // ice cobalt
+  [160, 219, 234],  // teal mist
+  [214, 204, 253],  // near-white violet accent
+  [170, 230, 228],  // near-white teal accent
+];
+function pickPal(){
+  const isAccent = Math.random() < 0.18;
+  if(isAccent) return PAL[Math.random()<0.5?5:6];
+  return PAL[Math.floor(Math.random()*5)];
+}
+function rnd(a,b){ return a+(b-a)*Math.random(); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+
+// ============================================================
+//  Three.js scene
+// ============================================================
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.z = 3.5; // moved closer for microscopic/zoomed-in feel
+const renderer = new THREE.WebGLRenderer({ canvas:tc, alpha:true, antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+// ============================================================
+//  LAYER A — 3D star field (Three.js Points, drifting in 3D)
+//  Background stars only. Vivid palette, twinkles.
+// ============================================================
+const STAR_COUNT = 450; // more stars for richer night-sky density
+const starGeom = new THREE.BufferGeometry();
+const starPos   = new Float32Array(STAR_COUNT * 3);
+const starColor = new Float32Array(STAR_COUNT * 3);
+const starSize  = new Float32Array(STAR_COUNT);
+const starDOF   = new Float32Array(STAR_COUNT); // depth-from-focus 0..1 (updated per frame)
+const starHalo  = new Float32Array(STAR_COUNT); // 1 = this star has a soft glow
+for(let i=0;i<STAR_COUNT;i++) starHalo[i] = Math.random() < 0.04 ? 1 : 0;
+const starData  = [];
+
+// Volume extents (world units) — wider z for dramatic depth & DOF
+const VOL_X = 5.0, VOL_Y = 2.5, VOL_Z = 6.5;
+for(let i=0;i<STAR_COUNT;i++){
+  // gaussian-ish toward center
+  const gx = (Math.random()+Math.random()+Math.random())/3 - 0.5;
+  const gy = (Math.random()+Math.random()+Math.random())/3 - 0.5;
+  const gz = (Math.random()+Math.random())/2 - 0.5;
+  const bx = gx * VOL_X * 2.0;
+  const by = gy * VOL_Y * 2.0;
+  const bz = gz * VOL_Z * 2.0;
+  starPos[i*3+0] = bx;
+  starPos[i*3+1] = by;
+  starPos[i*3+2] = bz;
+  const col = pickPal();
+  starColor[i*3+0] = col[0]/255;
+  starColor[i*3+1] = col[1]/255;
+  starColor[i*3+2] = col[2]/255;
+  starSize[i] = 1.2 + Math.random()*1.8;
+  starData.push({
+    bx, by, bz,
+    phase:Math.random()*Math.PI*2,
+    phase2:Math.random()*Math.PI*2,
+    phase3:Math.random()*Math.PI*2,
+    acc1: 0, acc2: 0, acc3: 0,
+    freq: 0.22 + Math.random()*0.45,
+    freq2:0.18 + Math.random()*0.38,
+    freq3:0.20 + Math.random()*0.42,
+    driftAmp: 0.12 + Math.random()*0.20,
+    warpFactor: 0.55 + Math.random()*0.9,
+    baseR: col[0]/255, baseG: col[1]/255, baseB: col[2]/255,
+    dx_disp: bx, dy_disp: by, dz_disp: bz,
+    easeRate: 0.006 + Math.random()*0.010,
+    vxm: 0, vym: 0, vzm: 0,
+    isTeal: col === PAL[5] || col === PAL[6],
+    // SPARKLE state — dual-frequency shimmer (per the reference effect):
+    // two sine waves at different rates multiply together, then pow(0.25)
+    // gives a constantly-shimmering value that mostly sits high but dips
+    // when the two waves interfere. Produces a steady twinkle, not a burst.
+    baseSize: starSize[i],
+    sparklePhase1: Math.random()*Math.PI*2,
+    sparklePhase2: Math.random()*Math.PI*2,
+    sparkleFreq1:  0.3 + Math.random()*0.9,    // 0.3 - 1.2 Hz — much slower for comfort
+    sparkleFreq2:  0.25 + Math.random()*0.7,   // 0.25 - 0.95 Hz
+    // Per-star sparkle strength: ~15% of stars actually twinkle visibly; rest are calm
+    sparkleStrength: Math.random() < 0.15 ? (0.55 + Math.random()*0.35) : (Math.random()*0.18),
+  });
+}
+starGeom.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+starGeom.setAttribute('color',    new THREE.BufferAttribute(starColor, 3));
+starGeom.setAttribute('aSize',    new THREE.BufferAttribute(starSize, 1));
+starGeom.setAttribute('aDOF',     new THREE.BufferAttribute(starDOF, 1));
+starGeom.setAttribute('aHalo',    new THREE.BufferAttribute(starHalo, 1));
+
+// ---- Build FIXED constellation pairs (screen-space, tight, sparse) ----
+// Goal: small mini-constellations of 2-5 stars each, scattered across the field.
+// Two requirements for a pair to qualify:
+//   (a) close in 2D SCREEN pixels (so they look adjacent)
+//   (b) close in 3D WORLD units (so the line doesn't span depth and look like a shooting burst)
+// Most stars stay lonely. NOTE: must run AFTER sizeAll() so camera + W/H are correct.
+const constellationPairs = [];
+function buildConstellationPairs(){
+  constellationPairs.length = 0;
+  const _q = new THREE.Vector3();
+  const proj = [];
+  for(let i=0;i<STAR_COUNT;i++){
+    const wx = starPos[i*3+0], wy = starPos[i*3+1], wz = starPos[i*3+2];
+    _q.set(wx, wy, wz).project(camera);
+    proj.push({
+      i,
+      sx: (_q.x*0.5+0.5)*W,    // pixel x on actual canvas
+      sy: (-_q.y*0.5+0.5)*H,   // pixel y on actual canvas
+      wx, wy, wz,              // world position (for depth-check)
+    });
+  }
+
+  // ============================================================
+  // Field-wide small constellations — most stars participate.
+  // Most stars cap at 3, but a small minority become "hubs" (cap 5) so a
+  // few constellations look more complex than the rest.
+  // Tight max line lengths keep individual constellations compact.
+  // ============================================================
+  const PAIR_PROB     = 0.75;
+  const HUB_PROB      = 0.08;
+  const CAP_REG       = 3;
+  const CAP_HUB       = 5;
+  const MAX_SCREEN_PX_BASE = 70;   // reference: at world z=0 (camera at z=3.5)
+  const MAX_WORLD_3D  = 1.4;
+  const TRIANGLE_PROB = 0.45;
+  const CAM_Z = 3.5;
+  // Effective screen-distance cap for a pair, given both stars' z values.
+  // Closer-to-camera stars project a fixed world distance to a larger pixel distance,
+  // so they need a proportionally larger screen budget to qualify as neighbors.
+  function adaptiveScreenPx(wzA, wzB){
+    const avgZ = (wzA + wzB) * 0.5;
+    const distFromCam = Math.max(0.5, CAM_Z - avgZ);
+    const refDist = CAM_Z; // star at z=0 = the reference
+    return MAX_SCREEN_PX_BASE * (refDist / distFromCam);
+  }
+
+  const counts = new Array(STAR_COUNT).fill(0);
+  const isHub  = new Array(STAR_COUNT).fill(false);
+  for(let i=0;i<STAR_COUNT;i++){
+    if(Math.random() < HUB_PROB) isHub[i] = true;
+  }
+  const seen = new Set();
+  const adjacency = new Array(STAR_COUNT).fill(null).map(()=>new Set());
+  const capOf = idx => isHub[idx] ? CAP_HUB : CAP_REG;
+
+  function addPair(ai, bi){
+    if(ai === bi) return false;
+    if(counts[ai] >= capOf(ai) || counts[bi] >= capOf(bi)) return false;
+    const key = ai < bi ? ai+':'+bi : bi+':'+ai;
+    if(seen.has(key)) return false;
+    seen.add(key);
+    constellationPairs.push([ai, bi]);
+    counts[ai]++; counts[bi]++;
+    adjacency[ai].add(bi); adjacency[bi].add(ai);
+    return true;
+  }
+
+  // shuffle so spatial order doesn't bias
+  for(let i=proj.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [proj[i], proj[j]] = [proj[j], proj[i]];
+  }
+
+  for(const a of proj){
+    if(Math.random() > PAIR_PROB) continue;
+    if(counts[a.i] >= capOf(a.i)) continue;
+    const nbrs = [];
+    for(const b of proj){
+      if(b.i === a.i) continue;
+      const dpx = Math.hypot(a.sx-b.sx, a.sy-b.sy);
+      const maxPx = adaptiveScreenPx(a.wz, b.wz);
+      if(dpx >= maxPx) continue;
+      const d3 = Math.hypot(a.wx-b.wx, a.wy-b.wy, a.wz-b.wz);
+      if(d3 >= MAX_WORLD_3D) continue;
+      nbrs.push({ b, d: dpx });
+    }
+    nbrs.sort((p,q)=>p.d-q.d);
+    // hubs want lots of partners; regulars want 1-2 typically
+    let want;
+    if(isHub[a.i]){
+      want = 3 + (Math.random()<0.5?1:0) + (Math.random()<0.3?1:0); // 3-5 for hubs
+    } else {
+      const roll = Math.random();
+      want = roll < 0.12 ? 3 : (roll < 0.45 ? 2 : 1);
+    }
+    let added = 0;
+    for(const { b } of nbrs){
+      if(added >= want) break;
+      if(addPair(a.i, b.i)) added++;
+    }
+    // triangle bias — closes triangles when neighbors are close
+    if(adjacency[a.i].size >= 2 && Math.random() < TRIANGLE_PROB){
+      const nb = Array.from(adjacency[a.i]);
+      for(let p=0;p<nb.length;p++){
+        for(let q=p+1;q<nb.length;q++){
+          const pp = proj.find(x=>x.i===nb[p]);
+          const qq = proj.find(x=>x.i===nb[q]);
+          if(!pp||!qq) continue;
+          const dpx = Math.hypot(pp.sx-qq.sx, pp.sy-qq.sy);
+          const d3 = Math.hypot(pp.wx-qq.wx, pp.wy-qq.wy, pp.wz-qq.wz);
+          if(dpx < adaptiveScreenPx(pp.wz, qq.wz) && d3 < MAX_WORLD_3D){
+            addPair(nb[p], nb[q]);
+          }
+        }
+      }
+    }
+  }
+}
+
+// Pre-allocate buffers for the constellation web using a safe MAX ceiling
+// (actual pair count will be set at sizeAll() time and re-init colors then).
+const MAX_PAIRS = 2200; // safe upper bound: STAR_COUNT (750) * CAP_HUB (5) / 2 + buffer
+let pairCount = 0; // runtime: set by buildConstellationPairs() / refreshPairBuffers()
+const pairWebPos   = new Float32Array(MAX_PAIRS * 2 * 3);
+const pairWebAlpha = new Float32Array(MAX_PAIRS * 2);
+const pairWebCol   = new Float32Array(MAX_PAIRS * 2 * 3);
+// Per-line lifecycle state. Each pair has its own age + cooldown timers so
+// constellations dissolve after the cursor has hovered them long enough,
+// then re-emerge after a cooldown — like real stars cycling.
+const pairState = []; // entries: {age, alive, dying, cooldown, peak}
+// Helpers: RGB(0..1) <-> HSL. Standard formulas.
+function rgb2hsl(r,g,b){
+  const max=Math.max(r,g,b), min=Math.min(r,g,b);
+  let h=0, s=0; const l=(max+min)/2;
+  if(max!==min){
+    const d=max-min;
+    s = l>0.5 ? d/(2-max-min) : d/(max+min);
+    if(max===r) h=(g-b)/d + (g<b?6:0);
+    else if(max===g) h=(b-r)/d + 2;
+    else h=(r-g)/d + 4;
+    h/=6;
+  }
+  return [h,s,l];
+}
+function hsl2rgb(h,s,l){
+  if(s===0) return [l,l,l];
+  const q = l<0.5 ? l*(1+s) : l+s-l*s;
+  const p = 2*l - q;
+  const hk = (x)=>{
+    if(x<0) x+=1; if(x>1) x-=1;
+    if(x<1/6) return p+(q-p)*6*x;
+    if(x<1/2) return q;
+    if(x<2/3) return p+(q-p)*(2/3-x)*6;
+    return p;
+  };
+  return [hk(h+1/3), hk(h), hk(h-1/3)];
+}
+
+function refreshPairBuffers(){
+  pairCount = constellationPairs.length;
+  for(let i=0;i<STAR_COUNT;i++) starData[i].inConstellation = false;
+  pairState.length = 0;
+  for(let i=0;i<pairCount;i++){
+    const [a,b] = constellationPairs[i];
+    starData[a].inConstellation = true;
+    starData[b].inConstellation = true;
+    const cR = (starColor[a*3+0]+starColor[b*3+0])*0.5;
+    const cG = (starColor[a*3+1]+starColor[b*3+1])*0.5;
+    const cB = (starColor[a*3+2]+starColor[b*3+2])*0.5;
+    pairWebCol[i*6+0]=cR; pairWebCol[i*6+1]=cG; pairWebCol[i*6+2]=cB;
+    pairWebCol[i*6+3]=cR; pairWebCol[i*6+4]=cG; pairWebCol[i*6+5]=cB;
+    // store base HSL + random hue-shift direction for this pair
+    const [bh, bs, bl] = rgb2hsl(cR, cG, cB);
+    pairState.push({
+      age: 0,
+      // Constellations now feel event-like rather than ambient noise:
+      // longer lifespans, much longer cooldowns. When one appears it holds and
+      // matters; when it dissolves, the field rests before the next reveal.
+      lifespan: 4.0 + Math.random()*3.0,         // 4-7s on screen (was 1.4-3.0)
+      cooldown: 0,
+      cooldownMax: 6.0 + Math.random()*6.0,      // 6-12s rest before re-emerge (was 1.5-3.5)
+      currentAlpha: 0,
+      // ~30% of lines stay faintly visible at rest so the web hints it's interactive
+      ambient: Math.random() < 0.08 ? (0.03 + Math.random()*0.04) : 0,
+      baseH: bh, baseS: bs, baseL: bl,
+      // each pair shifts in a different direction & magnitude on hover
+      shiftDir: Math.random() < 0.5 ? -1 : 1,
+      shiftMag: 0.10 + Math.random()*0.18, // 0.10-0.28 = ~36°-100° of hue swing at peak (much more dramatic)
+    });
+  }
+}
+
+// Custom shader: round point sprite, alpha falloff, color from attribute,
+// per-star fake DOF (out-of-focus stars get bigger and softer edge).
+const starMat = new THREE.ShaderMaterial({
+  transparent:true,
+  depthWrite:false,
+  vertexColors:true,
+  uniforms:{ uPxRatio:{ value: renderer.getPixelRatio() } },
+  vertexShader:`
+    attribute float aSize;
+    attribute float aDOF;       // 0 = in focus, 1 = max blur
+    attribute float aHalo;
+    varying vec3 vColor;
+    varying float vDOF;
+    varying float vHalo;
+    uniform float uPxRatio;
+    void main(){
+      vColor = color;
+      vDOF = aDOF;
+      vHalo = aHalo;
+      vec4 mv = modelViewMatrix * vec4(position,1.0);
+      gl_Position = projectionMatrix * mv;
+      // base size scales with distance (real perspective).
+      // Out-of-focus stars get up to ~2.4x larger ("bokeh bloat").
+      float dofBloat = 1.0 + vDOF * 1.4;
+      gl_PointSize = aSize * uPxRatio * (12.0 / -mv.z) * dofBloat * (1.0 + aHalo * 4.0);
+    }
+  `,
+  fragmentShader:`
+    varying vec3 vColor;
+    varying float vDOF;
+    varying float vHalo;
+    void main(){
+      vec2 uv = gl_PointCoord - vec2(0.5);
+      float d = length(uv);
+      if(vHalo > 0.5){
+        // sprite is 5x larger: core occupies the inner 1/5, soft glow fills the rest
+        float core = pow(smoothstep(0.10, 0.0, d), 1.4) * mix(1.0, 0.5, vDOF);
+        float glow = exp(-d*d*22.0) * 0.08;
+        gl_FragColor = vec4(vColor, max(core, glow));
+        return;
+      }
+      // In-focus: hard edge at d=0.5, soft inner; Out-of-focus: very soft edge,
+      // lower peak alpha (light spreads out).
+      // edgeStart controls when fade begins; for blur, fade starts earlier (0.1)
+      float edgeStart = mix(0.0, 0.15, vDOF);
+      float a = smoothstep(0.5, edgeStart, d);
+      // dim peak alpha when far from focus (light is dispersed)
+      float peak = mix(1.0, 0.45, vDOF);
+      a = pow(a, 1.4) * peak;
+      gl_FragColor = vec4(vColor, a);
+    }
+  `,
+});
+const starPoints = new THREE.Points(starGeom, starMat);
+scene.add(starPoints);
+
+// ---- Star constellation web ----
+// Dynamic LineSegments: rebuilt per frame from cursor-proximate stars.
+const MAX_WEB_SEGMENTS = 2200; // safe ceiling: matches MAX_PAIRS
+const webPos   = new Float32Array(MAX_WEB_SEGMENTS * 2 * 3);
+const webAlpha = new Float32Array(MAX_WEB_SEGMENTS * 2);
+const webCol   = new Float32Array(MAX_WEB_SEGMENTS * 2 * 3);
+const webGeo = new THREE.BufferGeometry();
+webGeo.setAttribute('position', new THREE.BufferAttribute(webPos, 3));
+webGeo.setAttribute('aAlpha',   new THREE.BufferAttribute(webAlpha, 1));
+webGeo.setAttribute('color',    new THREE.BufferAttribute(webCol, 3));
+webGeo.setDrawRange(0, 0);
+const webMat = new THREE.ShaderMaterial({
+  transparent:true, depthWrite:false, vertexColors:true,
+  vertexShader:`
+    attribute float aAlpha;
+    varying vec3 vColor;
+    varying float vAlpha;
+    void main(){
+      vColor = color;
+      vAlpha = aAlpha;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+    }
+  `,
+  fragmentShader:`
+    varying vec3 vColor;
+    varying float vAlpha;
+    void main(){ gl_FragColor = vec4(vColor, vAlpha); }
+  `,
+});
+const webLines = new THREE.LineSegments(webGeo, webMat);
+scene.add(webLines);
+
+// ============================================================
+//  LAYER B — Three meshes (sphere, cube, cylinder)
+//  Each: vertices as their own Points + edges as LineSegments.
+//  Vertices drift independently when idle, ease back to formation on hover.
+//  Edges reveal one-by-one (each has its own timer) when mesh is hovered.
+// ============================================================
+function buildMesh(geo, colorHex, center){
+  // Extract edges (pairs of vertex INDICES)
+  const edgesGeo = new THREE.EdgesGeometry(geo, 1);
+  const edgePosAttr = edgesGeo.attributes.position;
+  // Build unique vertex list by quantized position
+  const uniqVerts = [];
+  const indexMap  = []; // edgesGeo vertex idx -> uniqVerts idx
+  const lookup = new Map();
+  const key = (x,y,z)=> `${x.toFixed(4)}|${y.toFixed(4)}|${z.toFixed(4)}`;
+  for(let i=0;i<edgePosAttr.count;i++){
+    const x = edgePosAttr.getX(i), y = edgePosAttr.getY(i), z = edgePosAttr.getZ(i);
+    const k = key(x,y,z);
+    if(!lookup.has(k)){
+      lookup.set(k, uniqVerts.length);
+      uniqVerts.push([x,y,z]);
+    }
+    indexMap.push(lookup.get(k));
+  }
+  // Edges = consecutive pairs in indexMap
+  const edges = [];
+  for(let i=0;i<indexMap.length;i+=2){
+    edges.push([indexMap[i], indexMap[i+1]]);
+  }
+
+  const color = new THREE.Color(colorHex);
+
+  // -- Vertex Points geometry (drifting + snap-back) --
+  const N = uniqVerts.length;
+  const vPos   = new Float32Array(N*3);
+  const vCol   = new Float32Array(N*3);
+  const vSize  = new Float32Array(N);
+  const verts  = []; // js state
+  for(let i=0;i<N;i++){
+    const [bx,by,bz] = uniqVerts[i];
+    vPos[i*3+0] = bx + center.x; vPos[i*3+1] = by + center.y; vPos[i*3+2] = bz + center.z;
+    // brighten vertex color so it pops against desaturated edges
+    vCol[i*3+0] = Math.min(1, color.r*1.2 + 0.05);
+    vCol[i*3+1] = Math.min(1, color.g*1.2 + 0.05);
+    vCol[i*3+2] = Math.min(1, color.b*1.2 + 0.05);
+    vSize[i] = 2.6; // a bit bigger than bg stars
+    verts.push({
+      // base/formation position (world-space)
+      bx: bx + center.x, by: by + center.y, bz: bz + center.z,
+      // current position (also stored in attribute)
+      x:  bx + center.x, y:  by + center.y, z:  bz + center.z,
+      // drift offsets (idle)
+      ox: rnd(-0.18,0.18), oy: rnd(-0.18,0.18), oz: rnd(-0.18,0.18),
+      ph: Math.random()*Math.PI*2,
+      sp: 0.4 + Math.random()*0.6,
+      easeRate: 0.04 + Math.random()*0.05, // each vertex snaps at slightly diff rate
+    });
+  }
+  const vGeo = new THREE.BufferGeometry();
+  vGeo.setAttribute('position', new THREE.BufferAttribute(vPos, 3));
+  vGeo.setAttribute('color',    new THREE.BufferAttribute(vCol, 3));
+  vGeo.setAttribute('aSize',    new THREE.BufferAttribute(vSize, 1));
+  const vMat = starMat.clone();
+  vMat.uniforms = { uPxRatio:{ value: renderer.getPixelRatio() } };
+  const vPoints = new THREE.Points(vGeo, vMat);
+  scene.add(vPoints);
+
+  // -- Edges as LineSegments with per-segment opacity via vertex alpha --
+  // We use a custom material that reads per-vertex alpha attribute.
+  const E = edges.length;
+  const ePos   = new Float32Array(E*2*3);
+  const eAlpha = new Float32Array(E*2);
+  const eCol   = new Float32Array(E*2*3);
+  for(let i=0;i<E;i++){
+    const [a,b] = edges[i];
+    ePos[i*6+0] = verts[a].bx; ePos[i*6+1] = verts[a].by; ePos[i*6+2] = verts[a].bz;
+    ePos[i*6+3] = verts[b].bx; ePos[i*6+4] = verts[b].by; ePos[i*6+5] = verts[b].bz;
+    eAlpha[i*2+0] = 0; eAlpha[i*2+1] = 0;
+    // edges: desaturated + slightly darker version of the vertex color
+    const eLum = (color.r + color.g + color.b)/3 * 0.45;
+    const eR = color.r*0.40 + eLum*0.60;
+    const eG = color.g*0.40 + eLum*0.60;
+    const eB = color.b*0.40 + eLum*0.60;
+    eCol[i*6+0]=eR; eCol[i*6+1]=eG; eCol[i*6+2]=eB;
+    eCol[i*6+3]=eR; eCol[i*6+4]=eG; eCol[i*6+5]=eB;
+  }
+  const eGeo = new THREE.BufferGeometry();
+  eGeo.setAttribute('position', new THREE.BufferAttribute(ePos, 3));
+  eGeo.setAttribute('color',    new THREE.BufferAttribute(eCol, 3));
+  eGeo.setAttribute('aAlpha',   new THREE.BufferAttribute(eAlpha, 1));
+  const eMat = new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false, vertexColors:true,
+    vertexShader:`
+      attribute float aAlpha;
+      varying vec3 vColor;
+      varying float vAlpha;
+      void main(){
+        vColor = color;
+        vAlpha = aAlpha;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+      }
+    `,
+    fragmentShader:`
+      varying vec3 vColor;
+      varying float vAlpha;
+      void main(){
+        gl_FragColor = vec4(vColor, vAlpha);
+      }
+    `,
+  });
+  const eLines = new THREE.LineSegments(eGeo, eMat);
+  scene.add(eLines);
+
+  // Per-edge reveal state: target & current opacity, plus stagger delay
+  const edgeState = edges.map((_,i)=>({
+    target: 0,
+    current: 0,
+    revealOrder: Math.random(), // 0..1: when in the reveal sequence this edge comes in
+  }));
+
+  return {
+    verts, edges, color, center,
+    vGeo, vPoints,
+    eGeo, eLines, edgeState,
+    radius: geo.parameters.radius || Math.max(
+      geo.parameters.width  || 0,
+      geo.parameters.height || 0,
+      geo.parameters.radiusTop || 0
+    ) || 1.5,
+    revealProgress: 0, // 0..1
+  };
+}
+
+// ---- MESHES DISABLED ----
+// All three primitive meshes (sphere, cube/Suzanne, cylinder) are removed
+// for now. Leaving meshList empty so the existing render loop has nothing
+// to iterate over. Restore by reinstating the buildMesh() calls below.
+const meshList = [];
+const meshRotation = [];
+const meshGroups = [];
+
+// ============================================================
+//  Sizing
+// ============================================================
+let W, H;
+function sizeAll(){
+  W = hero.offsetWidth;
+  H = hero.offsetHeight;
+  camera.aspect = W/H;
+  camera.updateProjectionMatrix();
+  renderer.setSize(W, H, false);
+  ov.width = W; ov.height = H;
+  // Now that camera/W/H are correct, (re)build constellation pairs
+  buildConstellationPairs();
+  refreshPairBuffers();
+}
+
+// ============================================================
+//  Hover detection — project mesh center to screen space
+// ============================================================
+const _v = new THREE.Vector3();
+function meshHover(m){
+  if(!mouse.inside) return 0;
+  _v.copy(m.center).project(camera);
+  const sx = (_v.x*0.5+0.5)*W;
+  const sy = (-_v.y*0.5+0.5)*H;
+  const dx = mouse.x - sx, dy = mouse.y - sy;
+  const d  = Math.sqrt(dx*dx + dy*dy);
+  const range = 220;
+  if(d > range) return 0;
+  return Math.pow(1 - d/range, 1.0);
+}
+
+// ============================================================
+//  Main loop
+// ============================================================
+let tGlobal = 0;
+function loop(){
+  tGlobal += 0.016;
+  hoverStr = mouse.inside
+    ? Math.min(1, hoverStr+0.05)
+    : Math.max(0, hoverStr-0.05);
+
+
+  // Cursor world position (project NDC onto plane at z=0)
+  // Guard: if cursor is invalid or mouse never moved, fall back to a safe off-screen value
+  let cwx = 9999, cwy = 9999;
+  if(mouse.inside && isFinite(mouse.ndcX) && isFinite(mouse.ndcY)){
+    const cursorWorld = new THREE.Vector3(mouse.ndcX, mouse.ndcY, 0.5).unproject(camera);
+    const dir = cursorWorld.sub(camera.position).normalize();
+    if(Math.abs(dir.z) > 0.001){
+      const distToPlane = -camera.position.z / dir.z;
+      const px = camera.position.x + dir.x*distToPlane;
+      const py = camera.position.y + dir.y*distToPlane;
+      if(isFinite(px) && isFinite(py)){ cwx = px; cwy = py; }
+    }
+  }
+
+  // ---- Update background stars: ease-back + cursor warp + FLUID-FLOW coupling ----
+  // Each star eases toward its target position each frame, so when cursor leaves
+  // it slowly drifts back to home instead of snapping. Stars also pick up motion
+  // and brightness from the cursor's velocity — approximating the fluid's flow
+  // so the two layers feel like one ecosystem.
+  const spArr  = starGeom.attributes.position.array;
+  const dofArr = starGeom.attributes.aDOF.array;
+  const WARP_RADIUS  = 2.4;
+  const WARP_PUSH    = 0.42;
+  const WARP_SWIRL   = 0.22;
+  const ALIVE_RADIUS = 2.0;
+  const SPEED_BOOST  = 0.7;
+  const AMP_BOOST    = 0.5;
+  const BRIGHT_BOOST = 0.45;
+  const FOCUS_Z       = 0.0;
+  const FOCUS_DEPTH   = 1.6;
+  // Fluid-flow coupling: cursor velocity becomes a flow vector that nudges nearby stars.
+  const FLOW_RADIUS   = 2.6;
+  const FLOW_STRENGTH = 0.9;   // small nudge — cursor velocity is already in world units / frame
+  const FLOW_BRIGHT   = 0.35;
+
+  // Smooth cursor velocity once per frame (decays gracefully when cursor stops, like fluid)
+  // Reset cursor velocity state on mouse re-entry so the FIRST frame after
+  // re-entry doesn't produce a huge (cwx - stale_oldX) teleport delta.
+  if(typeof window.__wasInside === 'undefined') window.__wasInside = false;
+  const justEntered = mouse.inside && !window.__wasInside;
+  window.__wasInside = mouse.inside;
+  if(justEntered || typeof window.__lastCw === 'undefined'){
+    window.__lastCw = {x:cwx, y:cwy};
+    window.__cVel   = {x:0, y:0, mag:0};
+  }
+  const cVelX = cwx - window.__lastCw.x;
+  const cVelY = cwy - window.__lastCw.y;
+  window.__cVel.x   += (cVelX            - window.__cVel.x)   * 0.04;
+  window.__cVel.y   += (cVelY            - window.__cVel.y)   * 0.04;
+  window.__cVel.mag += (Math.hypot(cVelX,cVelY) - window.__cVel.mag) * 0.04;
+  const smVelX = window.__cVel.x, smVelY = window.__cVel.y, smVelMag = window.__cVel.mag;
+  window.__lastCw.x = cwx; window.__lastCw.y = cwy;
+
+  for(let i=0;i<starData.length;i++){
+    const d = starData[i];
+
+    let prox = 0;
+    if(mouse.inside){
+      const dxh = cwx - d.bx, dyh = cwy - d.by;
+      const dh = Math.hypot(dxh, dyh);
+      if(dh < ALIVE_RADIUS){
+        const u = 1 - dh/ALIVE_RADIUS;
+        prox = u*u*(3-2*u);
+        const zNorm = Math.max(0, Math.min(1, (d.bz + VOL_Z) / (2*VOL_Z)));
+        const depthMul = 1 - zNorm * 0.7;
+        prox *= depthMul;
+        prox *= d.warpFactor;
+        if(prox > 1) prox = 1;
+      }
+    }
+
+    const driftSpeedMul = d.inConstellation ? 0.55 : 1.0;
+    const dt = 0.016;
+    const speedMul = 1 + prox * SPEED_BOOST;
+    d.acc1 += d.freq  * speedMul * driftSpeedMul * dt;
+    d.acc2 += d.freq2 * speedMul * driftSpeedMul * dt;
+    d.acc3 += d.freq3 * speedMul * driftSpeedMul * dt;
+    const ampMul = 1 + prox * AMP_BOOST;
+    const ampX = d.driftAmp * ampMul;
+    const ampY = d.driftAmp * ampMul;
+    const ampZ = d.driftAmp * 0.6 * ampMul;
+    const dx_idle = ampX * Math.sin(d.acc1 + d.phase);
+    const dy_idle = ampY * Math.sin(d.acc2 + d.phase2);
+    const dz_idle = ampZ * Math.sin(d.acc3 + d.phase3);
+    const hx = d.bx + dx_idle;
+    const hy = d.by + dy_idle;
+    const hz = d.bz + dz_idle;
+
+    // Cursor REPULSION + outward swirl (depth-attenuated)
+    let warpX = 0, warpY = 0;
+    if(mouse.inside){
+      const rx = hx - cwx;
+      const ry = hy - cwy;
+      const rd = Math.hypot(rx, ry);
+      if(rd < WARP_RADIUS && rd > 0.001){
+        const u = 1 - rd/WARP_RADIUS;
+        const fall = u*u*(3-2*u);
+        const nx = rx/rd, ny = ry/rd;
+        const wf = d.warpFactor;
+        const zNorm = Math.max(0, Math.min(1, (d.bz + VOL_Z) / (2*VOL_Z)));
+        const depthMul = 1 - zNorm * 0.7;
+        const factor = wf * depthMul;
+        warpX += nx * fall * WARP_PUSH * factor;
+        warpY += ny * fall * WARP_PUSH * factor;
+        warpX +=  ny * fall * WARP_SWIRL * factor;
+        warpY += -nx * fall * WARP_SWIRL * factor;
+      }
+    }
+
+    // FLUID-FLOW coupling — stars near cursor drift in cursor's recent direction
+    // and brighten where the flow is active. Approximates the fluid pushing stars.
+    let flowX = 0, flowY = 0, fluidIntensity = 0;
+    if(mouse.inside){
+      const dxh = cwx - d.bx, dyh = cwy - d.by;
+      const dh = Math.hypot(dxh, dyh);
+      if(dh < FLOW_RADIUS){
+        const u = 1 - dh/FLOW_RADIUS;
+        const fall = u*u*(3-2*u);
+        const zNorm = Math.max(0, Math.min(1, (d.bz + VOL_Z) / (2*VOL_Z)));
+        const depthMul = 1 - zNorm * 0.6;
+        fluidIntensity = fall * Math.min(1, smVelMag * 25) * depthMul;
+        flowX = smVelX * fall * FLOW_STRENGTH * depthMul;
+        flowY = smVelY * fall * FLOW_STRENGTH * depthMul;
+      }
+    }
+
+    // TARGET = home + idle + warp + flow.  DISPLAYED eases toward TARGET each frame.
+    // Cursor leaving makes the target snap back to home, but displayed drifts back slowly.
+    // Hard-clamp the offset from home so a velocity spike can never throw stars off-screen.
+    const MAX_OFFSET = 1.2; // world units of max displacement from home
+    let tx = hx + warpX + flowX;
+    let ty = hy + warpY + flowY;
+    let tz = hz;
+    // Clamp target offset from home
+    const oxT = tx - d.bx, oyT = ty - d.by;
+    const oMag = Math.hypot(oxT, oyT);
+    if(oMag > MAX_OFFSET){
+      const s = MAX_OFFSET / oMag;
+      tx = d.bx + oxT*s;
+      ty = d.by + oyT*s;
+    }
+    // HEAVY, no bounce: per-star near-critical damping. Momentum is kept, but the
+    // star settles without overshooting (DAMP derived from its own stiffness).
+    const DAMP = 1 - 2.1 * Math.sqrt(d.easeRate);
+    d.vxm = (d.vxm + (tx - d.dx_disp) * d.easeRate) * DAMP;
+    d.vym = (d.vym + (ty - d.dy_disp) * d.easeRate) * DAMP;
+    d.vzm = (d.vzm + (tz - d.dz_disp) * d.easeRate) * DAMP;
+    d.dx_disp += d.vxm;
+    d.dy_disp += d.vym;
+    d.dz_disp += d.vzm;
+
+    spArr[i*3+0] = d.dx_disp;
+    spArr[i*3+1] = d.dy_disp;
+    spArr[i*3+2] = d.dz_disp;
+
+    // DOF based on displayed z
+    const zDist = Math.abs(d.dz_disp - FOCUS_Z);
+    let dof = Math.max(0, (zDist - FOCUS_DEPTH)) / (VOL_Z - FOCUS_DEPTH);
+    if(dof > 1) dof = 1;
+    dof = dof * dof * (3 - 2*dof);
+    dofArr[i] = dof;
+
+    // SPARKLE — slow dual-frequency shimmer gated by per-star strength.
+    // Most stars have very low strength → they sit nearly still. ~15% twinkle visibly.
+    const raw1 = Math.sin(tGlobal * d.sparkleFreq1 + d.sparklePhase1) * 0.5 + 0.5;
+    const raw2 = Math.sin(tGlobal * d.sparkleFreq2 + d.sparklePhase2) * 0.5 + 0.5;
+    const sparkleRaw = Math.pow(raw1 * raw2, 0.5);
+    // Per-star strength scales the deviation from neutral (0.5).
+    const sparkle = 0.5 + (sparkleRaw - 0.5) * d.sparkleStrength;
+    // Tight brightness modulation: 0.95-1.15 range (was 0.75-1.40) — easier on eyes
+    const flickerFactor = 0.95 + sparkle * 0.20;
+
+    // Cursor proximity BRIGHTENS stars + SATURATES them. Brightness is an additive
+    // boost; saturation is a push-from-grey (each channel deviates from the avg).
+    const cursorBoost = prox * 0.35;
+    const satBoost = prox * 0.6;
+    const brightAdd = fluidIntensity * FLOW_BRIGHT * 0.4 + cursorBoost;
+    const k = flickerFactor;
+    let r = d.baseR * k;
+    let g = d.baseG * k;
+    let b = d.baseB * k;
+    if(satBoost > 0){
+      const avg = (r + g + b) / 3;
+      r += (r - avg) * satBoost;
+      g += (g - avg) * satBoost;
+      b += (b - avg) * satBoost;
+    }
+    starColor[i*3+0] = Math.max(0, Math.min(1, r + brightAdd));
+    starColor[i*3+1] = Math.max(0, Math.min(1, g + brightAdd));
+    starColor[i*3+2] = Math.max(0, Math.min(1, b + brightAdd));
+    // Size: decoupled from sparkle — slow gentle breath, doesn't contribute to flicker
+    const sizeBreath = 0.97 + 0.06 * (0.5 + 0.5 * Math.sin(tGlobal * 0.5 + d.sparklePhase1));
+    starSize[i] = d.baseSize * sizeBreath;
+  }
+  starGeom.attributes.position.needsUpdate = true;
+  starGeom.attributes.color.needsUpdate = true;
+  starGeom.attributes.aSize.needsUpdate = true;
+  starGeom.attributes.aDOF.needsUpdate = true;
+
+  // ---- Update constellation web ----
+  // Lines are ALWAYS visible at a low ambient opacity so the constellations
+  // read like a star chart at rest. Cursor proximity brightens nearby lines.
+  const _p = new THREE.Vector3();
+  // Pre-project all star screen positions (used for cursor-proximity brightening).
+  // Always populated now — small cost, but enables ambient rendering.
+  const screenPos = new Array(STAR_COUNT);
+  for(let i=0;i<STAR_COUNT;i++){
+    _p.set(spArr[i*3+0], spArr[i*3+1], spArr[i*3+2]).project(camera);
+    screenPos[i] = { sx:(_p.x*0.5+0.5)*W, sy:(-_p.y*0.5+0.5)*H };
+  }
+  // Lines have a LIFESPAN:
+  //   - When cursor is near, age accumulates and alpha is target = cursor proximity.
+  //   - When age > lifespan, the line dies — alpha eases to 0 and enters cooldown.
+  //   - During cooldown, the line ignores cursor entirely.
+  //   - When cooldown expires, the line resets and can re-emerge on hover.
+  // Each line has randomized lifespan + cooldown so the field cycles organically.
+  const PEAK_ALPHA = 0.85;
+  const FRAME_DT = 0.016;
+  for(let i=0;i<pairCount;i++){
+    const [a,b] = constellationPairs[i];
+    pairWebPos[i*6+0]=spArr[a*3+0]; pairWebPos[i*6+1]=spArr[a*3+1]; pairWebPos[i*6+2]=spArr[a*3+2];
+    pairWebPos[i*6+3]=spArr[b*3+0]; pairWebPos[i*6+4]=spArr[b*3+1]; pairWebPos[i*6+5]=spArr[b*3+2];
+
+    const ps = pairState[i];
+    let targetAlpha = 0;
+
+    if(ps.cooldown > 0){
+      // dead — cooling down, no response to cursor
+      ps.cooldown -= FRAME_DT;
+      if(ps.cooldown <= 0){
+        // resurrected: reset and become eligible again
+        ps.cooldown = 0;
+        ps.age = 0;
+      }
+      targetAlpha = 0;
+    } else if(mouse.inside && hoverStr > 0){
+      const sa = screenPos[a], sb = screenPos[b];
+      const dA = Math.hypot(sa.sx-mouse.x, sa.sy-mouse.y);
+      const dB = Math.hypot(sb.sx-mouse.x, sb.sy-mouse.y);
+      const dMin = Math.min(dA, dB);
+      const RANGE = 200;
+      if(dMin < RANGE){
+        const prox = 1 - dMin/RANGE;
+        targetAlpha = prox*prox * PEAK_ALPHA * hoverStr;
+        // age accumulates while cursor is actively brightening this line
+        ps.age += FRAME_DT * prox;
+        if(ps.age > ps.lifespan){
+          // die: enter cooldown, force alpha to fade
+          ps.cooldown = ps.cooldownMax;
+          targetAlpha = 0;
+        }
+      } else {
+        // cursor far — let age decay slightly so unused lines don't accumulate fatigue
+        ps.age = Math.max(0, ps.age - FRAME_DT * 0.3);
+      }
+    } else {
+      // cursor outside hero — drain age slowly so re-entering doesn't instantly kill lines
+      ps.age = Math.max(0, ps.age - FRAME_DT * 0.3);
+    }
+
+    // Ambient floor: resting lines never drop below their faint visibility
+    targetAlpha = Math.max(targetAlpha, ps.ambient);
+    // Smooth the visible alpha so birth and death are gradual, not snapping
+    const easeRate = (targetAlpha > ps.currentAlpha) ? 0.045 : 0.022;
+    ps.currentAlpha += (targetAlpha - ps.currentAlpha) * easeRate;
+    pairWebAlpha[i*2+0] = ps.currentAlpha;
+    pairWebAlpha[i*2+1] = ps.currentAlpha;
+
+    // ---- HUE SHIFT — line color drifts toward a different hue over its lifespan ----
+    // Hue follows a bell-curve over the line's age: starts at base hue, peaks shifted
+    // when the line is in mid-life, returns toward base as it dies.
+    // This gives the constellation chromatic "energy" that crests and fades — separate
+    // from but timed with the alpha lifecycle.
+    const lifeProg = Math.min(1, ps.age / ps.lifespan); // 0..1 over life
+    // bell curve: 0 -> 1 -> 0, peaking at lifeProg = 0.5
+    const lifeBell = Math.sin(lifeProg * Math.PI);
+    // velocity boost makes fast cursor movements push the shift further
+    const velBoost = Math.min(1, smVelMag * 8) * 0.6;
+    // activity gates the shift (lines that aren't visible don't shift)
+    const activity = ps.currentAlpha / PEAK_ALPHA;
+    const shift = ps.shiftDir * ps.shiftMag * (lifeBell + velBoost) * activity;
+    let newH = ps.baseH + shift;
+    if(newH < 0) newH += 1;
+    if(newH > 1) newH -= 1;
+    // Brighten lines by lifting luminance — pushes line color toward white
+    // for crisper visibility against the light bg.
+    const lineL = Math.max(0.30, ps.baseL * 0.90);           // darker than the stars
+    const lineS = Math.min(1, ps.baseS * 1.25 + 0.10);       // a touch richer
+    const [nr, ng, nb] = hsl2rgb(newH, lineS, lineL);
+    pairWebCol[i*6+0]=nr; pairWebCol[i*6+1]=ng; pairWebCol[i*6+2]=nb;
+    pairWebCol[i*6+3]=nr; pairWebCol[i*6+4]=ng; pairWebCol[i*6+5]=nb;
+  }
+  webGeo.attributes.position.array.set(pairWebPos);
+  webGeo.attributes.aAlpha.array.set(pairWebAlpha);
+  webGeo.attributes.color.array.set(pairWebCol);
+  webGeo.attributes.position.needsUpdate = true;
+  webGeo.attributes.aAlpha.needsUpdate = true;
+  webGeo.attributes.color.needsUpdate = true;
+  webGeo.setDrawRange(0, pairCount*2);
+
+  // ---- Update meshes ----
+  for(let mi=0; mi<meshList.length; mi++){
+    const m = meshList[mi];
+    // advance rotation
+    const rs = meshRotation[mi];
+    rs.ax += rs.sx; rs.ay += rs.sy; rs.az += rs.sz;
+    const ca = Math.cos(rs.ax), sa = Math.sin(rs.ax);
+    const cb = Math.cos(rs.ay), sb = Math.sin(rs.ay);
+    const cz = Math.cos(rs.az), sz = Math.sin(rs.az);
+    // rotate each vertex's base position around mesh center using ZYX Euler
+    for(const v of m.verts){
+      let x = v.lx, y = v.ly, z = v.lz;
+      // Z rotation
+      let nx = x*cz - y*sz;
+      let ny = x*sz + y*cz;
+      x = nx; y = ny;
+      // Y rotation
+      nx = x*cb + z*sb;
+      let nz = -x*sb + z*cb;
+      x = nx; z = nz;
+      // X rotation
+      ny = y*ca - z*sa;
+      nz = y*sa + z*ca;
+      y = ny; z = nz;
+      v.bx = m.center.x + x;
+      v.by = m.center.y + y;
+      v.bz = m.center.z + z;
+    }
+    const hv = meshHover(m);
+    // reveal progress eases toward hover
+    m.revealProgress += (hv - m.revealProgress) * 0.18;
+    const rp = m.revealProgress;
+
+    // Vertex update: idle drift + ease back to formation as rp increases
+    const vArr = m.vGeo.attributes.position.array;
+    for(let i=0;i<m.verts.length;i++){
+      const v = m.verts[i];
+      // idle drift target = base + sinusoidal wander
+      const wx = v.ox * Math.sin(tGlobal*v.sp + v.ph);
+      const wy = v.oy * Math.sin(tGlobal*v.sp*1.3 + v.ph*1.7);
+      const wz = v.oz * Math.sin(tGlobal*v.sp*0.7 + v.ph*0.5);
+      const idleX = v.bx + wx;
+      const idleY = v.by + wy;
+      const idleZ = v.bz + wz;
+      // target blends from idle (rp=0) toward formation (rp=1)
+      const tx = lerp(idleX, v.bx, rp);
+      const ty = lerp(idleY, v.by, rp);
+      const tz = lerp(idleZ, v.bz, rp);
+      v.x += (tx - v.x) * v.easeRate;
+      v.y += (ty - v.y) * v.easeRate;
+      v.z += (tz - v.z) * v.easeRate;
+      vArr[i*3+0] = v.x;
+      vArr[i*3+1] = v.y;
+      vArr[i*3+2] = v.z;
+    }
+    m.vGeo.attributes.position.needsUpdate = true;
+
+    // Update edges: sync line endpoints to vertices, set per-vertex alpha
+    // Edges reveal sequentially based on revealOrder: edge appears when rp > revealOrder.
+    const eArr = m.eGeo.attributes.position.array;
+    const aArr = m.eGeo.attributes.aAlpha.array;
+    for(let i=0;i<m.edges.length;i++){
+      const [a,b] = m.edges[i];
+      const va = m.verts[a], vb = m.verts[b];
+      eArr[i*6+0]=va.x; eArr[i*6+1]=va.y; eArr[i*6+2]=va.z;
+      eArr[i*6+3]=vb.x; eArr[i*6+4]=vb.y; eArr[i*6+5]=vb.z;
+
+      const es = m.edgeState[i];
+      // sequential reveal: edge "opens" once rp exceeds revealOrder
+      const localProg = Math.max(0, Math.min(1, (rp - es.revealOrder*0.5) / 0.18));
+      const target = localProg * 1.0;
+      es.current += (target - es.current) * 0.12;
+      aArr[i*2+0] = es.current;
+      aArr[i*2+1] = es.current;
+    }
+    m.eGeo.attributes.position.needsUpdate = true;
+    m.eGeo.attributes.aAlpha.needsUpdate = true;
+  }
+
+  renderer.render(scene, camera);
+
+  // ---- Overlay: VERTICAL-ONLY vignette ----
+  octx.clearRect(0,0,W,H);
+
+  // Gentler vertical fade — only the top/bottom 10% blend to bg, middle is clean
+  // Stops are FRACTIONS of H, so the fade scales with whatever size the iframe is.
+  const tb = octx.createLinearGradient(0,0,0,H);
+  tb.addColorStop(0,    'rgba(222,222,222,1)');
+  tb.addColorStop(0.10, 'rgba(222,222,222,0.4)');
+  tb.addColorStop(0.22, 'rgba(222,222,222,0)');
+  tb.addColorStop(0.52, 'rgba(222,222,222,0)');
+  tb.addColorStop(0.68, 'rgba(222,222,222,0.2)');
+  tb.addColorStop(0.84, 'rgba(222,222,222,0.62)');
+  tb.addColorStop(0.94, 'rgba(222,222,222,0.9)');
+  tb.addColorStop(1,    'rgba(222,222,222,1)');
+  octx.fillStyle = tb;
+  octx.fillRect(0,0,W,H);
+
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener('resize', sizeAll);
+if(window.ResizeObserver){ new ResizeObserver(()=>sizeAll()).observe(hero); }
+sizeAll();
+requestAnimationFrame(loop);
+</script>
+
+</body>
+</html>
