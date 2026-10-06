@@ -8,7 +8,7 @@
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body {
     width:100%; height:100%; margin:0; overflow:hidden;
-    background:#1c2030;
+    background:#1e2026;
     font-family:'Trebuchet MS',Arial,Helvetica,sans-serif;
   }
 
@@ -18,7 +18,7 @@
     padding:0;
     height:100%;
     text-align:center;
-    background:#1c2030;
+    background:#1e2026;
   }
 
   #hero {
@@ -1363,13 +1363,13 @@ function loop(){
     octx.lineWidth = 1;
     // [offsetX, offsetY, radius, alpha] — mostly concentric, a few offset like the poster
     const rings = [
-      [ 0.00,  0.00, 0.16, 0.38],
-      [ 0.00,  0.00, 0.30, 0.30],
-      [ 0.00,  0.00, 0.47, 0.24],
-      [ 0.00,  0.00, 0.70, 0.17],
-      [ 0.00,  0.00, 0.98, 0.11],
-      [ 0.14,  0.10, 0.24, 0.26],
-      [-0.06,  0.26, 0.40, 0.16],
+      [ 0.00,  0.00, 0.16, 0.62],
+      [ 0.00,  0.00, 0.30, 0.52],
+      [ 0.00,  0.00, 0.47, 0.44],
+      [ 0.00,  0.00, 0.70, 0.34],
+      [ 0.00,  0.00, 0.98, 0.24],
+      [ 0.14,  0.10, 0.24, 0.46],
+      [-0.06,  0.26, 0.40, 0.32],
     ];
     for(const [ox, oy, r, a] of rings){
       octx.beginPath();
@@ -1378,7 +1378,7 @@ function loop(){
       octx.stroke();
     }
     // two long hairlines crossing the center
-    octx.strokeStyle = `rgba(${GOLD},0.12)`;
+    octx.strokeStyle = `rgba(${GOLD},0.24)`;
     octx.beginPath(); octx.moveTo(cx - 1.1*S, cy + 0.42*S); octx.lineTo(cx + 1.4*S, cy - 0.54*S); octx.stroke();
     octx.beginPath(); octx.moveTo(cx - 0.3*S, cy - 1.2*S); octx.lineTo(cx + 0.38*S, cy + 1.5*S); octx.stroke();
     // nodes orbiting slowly on the rings: [ringIndex, speed rad/s, phase, size]
@@ -1402,21 +1402,6 @@ function loop(){
     octx.restore();
   }
 
-  // HORIZON: a flat, subtle band of atmospheric blue where space meets the white.
-  // Crest sits at HORIZON_Y (fraction of height), around the "Breathe Magic" heading.
-  const HORIZON_Y = 0.53;
-  {
-    const hz = octx.createLinearGradient(0, H * (HORIZON_Y - 0.10), 0, H * (HORIZON_Y + 0.12));
-    const STEPS = 24;
-    for(let k=0;k<=STEPS;k++){
-      const u = k/STEPS;                                   // 0 = above (space) → 1 = below
-      const x = (u - 0.45) / 0.45;                         // peak a little above centre
-      const a = 0.22 * Math.exp(-x*x*2.2);                 // soft bell, no hard edges
-      hz.addColorStop(u, `rgba(120,155,220,${a.toFixed(4)})`);
-    }
-    octx.fillStyle = hz;
-    octx.fillRect(0, 0, W, H);
-  }
 
   const tb = octx.createLinearGradient(0,0,0,H);
   const FADE_START = 0.50, STEPS = 32;   // white begins just above the horizon
