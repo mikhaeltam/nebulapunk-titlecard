@@ -1344,6 +1344,68 @@ function loop(){
   // Stops are FRACTIONS of H, so the fade scales with whatever size the iframe is.
   // No top fade. Bottom: dark grey -> white along a smootherstep curve sampled at
   // many stops, so there's no visible kink/edge where the fade begins or ends.
+  // ORBIT DIAGRAM — fine champagne-gold hairline circles in the spirit of an
+  // astronomical chart. Centered to the LEFT. Nodes travel slowly along their rings,
+  // and the whole diagram drifts a few pixels with the cursor for depth.
+  {
+    const GOLD = '214,192,148';
+    if(typeof window.__orb === 'undefined') window.__orb = { px:0, py:0 };
+    const onCard = mouse.inside && mouse.x >= 0 && mouse.x <= W && mouse.y >= 0 && mouse.y <= H;
+    const tx = onCard ? (mouse.x / W - 0.5) * -14 : 0;   // gentle parallax (±7px)
+    const ty = onCard ? (mouse.y / H - 0.5) * -10 : 0;
+    window.__orb.px += (tx - window.__orb.px) * 0.03;
+    window.__orb.py += (ty - window.__orb.py) * 0.03;
+    const S  = Math.min(W, 1100);                       // scale with width, capped
+    const cx = W * 0.30 + window.__orb.px;
+    const cy = H * 0.24 + window.__orb.py;
+    const t  = tGlobal;
+    octx.save();
+    octx.lineWidth = 1;
+    // [offsetX, offsetY, radius, alpha] — mostly concentric, a few offset like the poster
+    const rings = [
+      [ 0.00,  0.00, 0.16, 0.38],
+      [ 0.00,  0.00, 0.30, 0.30],
+      [ 0.00,  0.00, 0.47, 0.24],
+      [ 0.00,  0.00, 0.70, 0.17],
+      [ 0.00,  0.00, 0.98, 0.11],
+      [ 0.14,  0.10, 0.24, 0.26],
+      [-0.06,  0.26, 0.40, 0.16],
+    ];
+    for(const [ox, oy, r, a] of rings){
+      octx.beginPath();
+      octx.arc(cx + ox*S, cy + oy*S, r*S, 0, Math.PI*2);
+      octx.strokeStyle = `rgba(${GOLD},${a})`;
+      octx.stroke();
+    }
+    // two long hairlines crossing the center
+    octx.strokeStyle = `rgba(${GOLD},0.12)`;
+    octx.beginPath(); octx.moveTo(cx - 1.1*S, cy + 0.42*S); octx.lineTo(cx + 1.4*S, cy - 0.54*S); octx.stroke();
+    octx.beginPath(); octx.moveTo(cx - 0.3*S, cy - 1.2*S); octx.lineTo(cx + 0.38*S, cy + 1.5*S); octx.stroke();
+    // nodes orbiting slowly on the rings: [ringIndex, speed rad/s, phase, size]
+    const nodes = [
+      [0,  0.060, 0.4, 2.6], [1, -0.040, 2.1, 3.2], [1, -0.040, 5.0, 1.8],
+      [2,  0.028, 1.2, 2.4], [3, -0.020, 3.6, 3.0], [3, -0.020, 0.3, 1.8],
+      [4,  0.014, 4.4, 2.6], [5,  0.050, 0.9, 2.0], [6, -0.024, 2.8, 2.2],
+    ];
+    for(const [ri, sp, ph, sz] of nodes){
+      const [ox, oy, r] = rings[ri];
+      const ang = ph + t * sp;
+      const nx = cx + ox*S + Math.cos(ang) * r*S;
+      const ny = cy + oy*S + Math.sin(ang) * r*S;
+      const halo = octx.createRadialGradient(nx, ny, 0, nx, ny, sz*5);
+      halo.addColorStop(0, `rgba(${GOLD},0.35)`);
+      halo.addColorStop(1, `rgba(${GOLD},0)`);
+      octx.fillStyle = halo;
+      octx.beginPath(); octx.arc(nx, ny, sz*5, 0, Math.PI*2); octx.fill();
+      octx.fillStyle = `rgba(236,220,186,0.95)`;
+      octx.beginPath(); octx.arc(nx, ny, sz, 0, Math.PI*2); octx.fill();
+    }
+    // center point
+    octx.fillStyle = `rgba(236,220,186,0.8)`;
+    octx.beginPath(); octx.arc(cx, cy, 2.2, 0, Math.PI*2); octx.fill();
+    octx.restore();
+  }
+
   // HORIZON (seen from space): a curved, soft blue atmosphere band. Its crest sits at
   // HORIZON_Y (fraction of height) — around the "Breathe Magic" heading in the card.
   const HORIZON_Y = 0.53;
