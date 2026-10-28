@@ -477,8 +477,8 @@ resize(); draw();
     if (idle) { tx = .5 + Math.sin(s * .21) * .28; ty = .45 + Math.cos(s * .16) * .22; }
     on += ((idle ? 0 : 1) - on) * .06;
     const kk = reduce ? 1 : .12; cx += (tx - cx) * kk; cy += (ty - cy) * kk;
-    // glare sits up-left of the cursor, as if lit from above, so the effect under the cursor stays clear
-    const gx = cx - .07, gy = cy - .13;
+    // glare centred on the cursor
+    const gx = cx, gy = cy;
     card.style.setProperty('--gx', (gx * 100).toFixed(2) + '%');
     card.style.setProperty('--gy', (gy * 100).toFixed(2) + '%');
     card.style.setProperty('--g-on', on.toFixed(3));
