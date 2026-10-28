@@ -1531,16 +1531,21 @@ function loop(){
       [ 0.14,  0.10, 0.24, 0.46],
       [-0.06,  0.26, 0.40, 0.32],
     ];
+    // brighter rings with a soft glow (canvas shadow in the ring colour)
+    const RING_BOOST = 1.4;
+    octx.shadowColor = `rgba(${GOLD},0.85)`;
+    octx.shadowBlur = 9;
     octx.lineWidth = 1.5;                           // slightly thicker rings
     for(const [ox, oy, r, a] of rings){
       octx.beginPath();
       octx.arc(cx + ox*S, cy + oy*S, r*S, 0, Math.PI*2);
-      octx.strokeStyle = `rgba(${GOLD},${a})`;
+      octx.strokeStyle = `rgba(${GOLD},${Math.min(1, a * RING_BOOST).toFixed(3)})`;
       octx.stroke();
     }
     // two long hairlines crossing the center (kept at 1px)
     octx.lineWidth = 1;
-    octx.strokeStyle = `rgba(${GOLD},0.24)`;
+    octx.shadowBlur = 6;
+    octx.strokeStyle = `rgba(${GOLD},0.38)`;
     octx.beginPath(); octx.moveTo(cx - 1.1*S, cy + 0.42*S); octx.lineTo(cx + 1.4*S, cy - 0.54*S); octx.stroke();
     octx.beginPath(); octx.moveTo(cx - 0.3*S, cy - 1.2*S); octx.lineTo(cx + 0.38*S, cy + 1.5*S); octx.stroke();
     // nodes orbiting slowly on the rings: [ringIndex, speed rad/s, phase, size]
@@ -1559,8 +1564,9 @@ function loop(){
       octx.beginPath(); octx.arc(nx, ny, sz * 0.8, 0, Math.PI*2); octx.fill();
     }
     // center point
-    octx.fillStyle = `rgba(${GOLD},0.6)`;
+    octx.fillStyle = `rgba(${GOLD},0.75)`;
     octx.beginPath(); octx.arc(cx, cy, 2.2, 0, Math.PI*2); octx.fill();
+    octx.shadowBlur = 0; octx.shadowColor = 'transparent';
 
     // Chromatic aberration near the cursor: redraw the diagram twice, scaled slightly
     // about the cursor (red out, blue in), only inside a soft disc around it.
