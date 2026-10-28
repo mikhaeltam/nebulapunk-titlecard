@@ -351,13 +351,40 @@
     -webkit-mask-image:linear-gradient(to bottom, #000 0%, #000 55%, transparent 85%);
             mask-image:linear-gradient(to bottom, #000 0%, #000 55%, transparent 85%);
   }
+  /* soft-light: the gaps read strongly over the dark field but almost vanish on bright stars and rings,
+     the way a real CRT's lines fill in where the picture is bright */
   .scanlines {
-    background:repeating-linear-gradient(to bottom, rgba(0,0,0,.45) 0 1px, transparent 1px 3px);
+    background:repeating-linear-gradient(to bottom, rgba(0,0,0,.7) 0 1px, transparent 1px 3px);
+    mix-blend-mode:soft-light;
   }
+  /* color-dodge: the refresh band lifts the stars it passes over and leaves empty space dark */
   .scanroll {
-    background:linear-gradient(to bottom, transparent 40%, rgba(255,255,255,.06) 50%, transparent 60%);
+    background:linear-gradient(to bottom, transparent 40%, rgba(255,255,255,.16) 50%, transparent 60%);
+    mix-blend-mode:color-dodge;
     background-size:100% 250%;
     animation:scanRoll 7s linear infinite;
+  }
+  /* Phosphor bloom: a soft copy of the stars and rings drawn above the scan lines,
+     so bright points glow across the gaps */
+  #crt-bloom {
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    pointer-events:none;
+    z-index:6;
+    filter:blur(4px) brightness(1.3);
+    mix-blend-mode:screen;
+    opacity:.55;
+    -webkit-mask-image:linear-gradient(to bottom, #000 0%, #000 50%, transparent 75%);
+            mask-image:linear-gradient(to bottom, #000 0%, #000 50%, transparent 75%);
+  }
+  /* Glass edge: corners fall off slightly, kept clear of the white bottom */
+  .crt-vignette {
+    position:absolute; inset:0;
+    pointer-events:none;
+    z-index:7;
+    background:radial-gradient(ellipse 75% 70% at 50% 40%, transparent 55%, rgba(0,0,0,.42) 100%);
+    -webkit-mask-image:linear-gradient(to bottom, #000 0%, #000 45%, transparent 70%);
+            mask-image:linear-gradient(to bottom, #000 0%, #000 45%, transparent 70%);
   }
   @keyframes scanRoll { from { background-position:0 130%; } to { background-position:0 -130%; } }
   @media (prefers-reduced-motion: reduce) { .scanroll { animation:none; } }
@@ -372,6 +399,8 @@
     <canvas id="prism-leak" aria-hidden="true"></canvas>
     <div class="scanlines" aria-hidden="true"></div>
     <div class="scanroll" aria-hidden="true"></div>
+    <canvas id="crt-bloom" aria-hidden="true"></canvas>
+    <div class="crt-vignette" aria-hidden="true"></div>
   </div>
 </div>
 
@@ -430,7 +459,7 @@ function lerp(a,b,t){ return a+(b-a)*t; }
 const scene  = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
 camera.position.z = 3.5; // moved closer for microscopic/zoomed-in feel
-const renderer = new THREE.WebGLRenderer({ canvas:tc, alpha:true, antialias:true });
+const renderer = new THREE.WebGLRenderer({ canvas:tc, alpha:true, antialias:true, preserveDrawingBuffer:true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 // ============================================================
@@ -1563,6 +1592,37 @@ requestAnimationFrame(loop);
       ctx.closePath(); ctx.fill();
       ctx.restore();
     }
+    ctx.globalCompositeOperation = 'source-over';
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+<script>
+/* Phosphor bloom: each frame, copy the stars (WebGL) and rings (overlay) at low resolution;
+   CSS blurs it and screens it over the scan lines. Only the top of the overlay is copied,
+   so the white fade at the bottom doesn't glow. */
+(() => {
+  const hero = document.getElementById('hero');
+  const src3d = document.getElementById('three-canvas');
+  const src2d = document.getElementById('overlay');
+  const cv = document.getElementById('crt-bloom');
+  const ctx = cv.getContext('2d');
+  const SCALE = 0.35;
+  const resize = () => {
+    const r = hero.getBoundingClientRect();
+    cv.width = Math.max(1, Math.round(r.width * SCALE));
+    cv.height = Math.max(1, Math.round(r.height * SCALE));
+  };
+  addEventListener('resize', resize); resize();
+  function frame() {
+    const W = cv.width, H = cv.height;
+    ctx.clearRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'lighter';
+    try {
+      if (src3d.width) ctx.drawImage(src3d, 0, 0, W, H);
+      if (src2d.width) ctx.drawImage(src2d, 0, 0, src2d.width, src2d.height * .55, 0, 0, W, H * .55);
+    } catch (e) {}
     ctx.globalCompositeOperation = 'source-over';
     requestAnimationFrame(frame);
   }
