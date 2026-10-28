@@ -400,9 +400,9 @@
   .glass-glare {
     background:
       /* soft hotspot */
-      radial-gradient(ellipse 22% 26% at var(--gx) var(--gy), rgba(255,255,255,.3) 0%, rgba(255,255,255,.1) 45%, transparent 100%),
+      radial-gradient(ellipse 22% 26% at var(--gx) var(--gy), rgba(255,255,255,.24) 0%, rgba(255,255,255,.08) 45%, transparent 100%),
       /* broad diagonal sheen through the same point */
-      radial-gradient(ellipse 60% 14% at var(--gx) var(--gy), rgba(220,235,255,.13) 0%, transparent 100%);
+      radial-gradient(ellipse 60% 14% at var(--gx) var(--gy), rgba(220,235,255,.1) 0%, transparent 100%);
     mix-blend-mode:screen;
     opacity:calc(.55 + .45 * var(--g-on));
   }
@@ -1696,10 +1696,13 @@ requestAnimationFrame(loop);
     rot += (target - rot) * .05;
 
     // glass glare rides on the same smoothed point (slightly behind it, like a reflection)
-    hero.style.setProperty('--gx', (cx * 100).toFixed(2) + '%');
-    hero.style.setProperty('--gy', (cy * 100).toFixed(2) + '%');
+    // offset up and to the left of the cursor, as if lit from above, so the constellations
+    // that form under the cursor stay clear of the brightest part of the glare
+    const gx = cx - 0.07, gy = cy - 0.13;
+    hero.style.setProperty('--gx', (gx * 100).toFixed(2) + '%');
+    hero.style.setProperty('--gy', (gy * 100).toFixed(2) + '%');
     hero.style.setProperty('--g-on', on.toFixed(3));
-    window.__glare = { x: cx, y: cy, on };   // shared with the glass scratches
+    window.__glare = { x: gx, y: gy, on };   // shared with the glass scratches
 
     const band = Math.min(W, H) * LEAK_WIDTH * (1 + Math.sin(s * .5) * .08);
     const len = Math.hypot(W, H) * 1.3;
