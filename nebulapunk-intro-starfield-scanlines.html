@@ -406,6 +406,26 @@
     mix-blend-mode:screen;
     opacity:calc(.55 + .45 * var(--g-on));
   }
+  /* Glass wear.
+     Smudges: soft haze, wipe smears and dust, drawn once and revealed by the glare.
+     Scratches: procedural hairlines that only catch the light when they run across the direction
+     of the cursor, so they flash on and off and highlights slide along curved ones as you move. */
+  #glass-smudge, #glass-scratch {
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    pointer-events:none;
+    z-index:8;
+    mix-blend-mode:screen;
+  }
+  #glass-smudge {
+    opacity:calc(.35 + .65 * var(--g-on));
+    -webkit-mask-image:radial-gradient(ellipse 34% 40% at var(--gx) var(--gy), #000 0%, rgba(0,0,0,.35) 50%, transparent 100%);
+            mask-image:radial-gradient(ellipse 34% 40% at var(--gx) var(--gy), #000 0%, rgba(0,0,0,.35) 50%, transparent 100%);
+  }
+  #glass-scratch {
+    -webkit-mask-image:linear-gradient(to bottom, #000 0%, #000 45%, transparent 72%);
+            mask-image:linear-gradient(to bottom, #000 0%, #000 45%, transparent 72%);
+  }
   @keyframes scanRoll { from { background-position:0 130%; } to { background-position:0 -130%; } }
   @media (prefers-reduced-motion: reduce) { .scanroll { animation:none; } }
 </style>
@@ -422,6 +442,8 @@
     <canvas id="crt-bloom" aria-hidden="true"></canvas>
     <div class="crt-vignette" aria-hidden="true"></div>
     <div class="glass-glare" aria-hidden="true"></div>
+    <canvas id="glass-smudge" aria-hidden="true"></canvas>
+    <canvas id="glass-scratch" aria-hidden="true"></canvas>
   </div>
 </div>
 
@@ -1677,6 +1699,7 @@ requestAnimationFrame(loop);
     hero.style.setProperty('--gx', (cx * 100).toFixed(2) + '%');
     hero.style.setProperty('--gy', (cy * 100).toFixed(2) + '%');
     hero.style.setProperty('--g-on', on.toFixed(3));
+    window.__glare = { x: cx, y: cy, on };   // shared with the glass scratches
 
     const band = Math.min(W, H) * LEAK_WIDTH * (1 + Math.sin(s * .5) * .08);
     const len = Math.hypot(W, H) * 1.3;
@@ -1743,6 +1766,156 @@ requestAnimationFrame(loop);
     ctx.globalCompositeOperation = 'source-over';
     requestAnimationFrame(frame);
   }
+  requestAnimationFrame(frame);
+})();
+</script>
+<script>
+/* Glass wear. Both layers use a fixed seed, so the glass looks the same on every visit. */
+(() => {
+  const hero = document.getElementById('hero');
+  const smudge = document.getElementById('glass-smudge');
+  const scr = document.getElementById('glass-scratch');
+  const sctx = scr.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let CW = 1, CH = 1, dpr = 1, scratches = [];
+
+  const rng = s => () => (s = (s * 16807) % 2147483647) / 2147483647;
+  // smooth 1D value noise along a scratch (intermittent, uneven depth)
+  const noise1 = (rnd) => {
+    const k = Array.from({ length: 12 }, rnd);
+    return u => { const x = u * 11, i = Math.floor(x), f = x - i, t = f * f * (3 - 2 * f);
+                  return k[i] * (1 - t) + k[Math.min(11, i + 1)] * t; };
+  };
+
+  function build() {
+    const r = hero.getBoundingClientRect();
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    CW = Math.max(1, r.width); CH = Math.max(1, r.height);
+    const area = (CW * CH) / (1200 * 675);
+
+    // ---------- smudges (static) ----------
+    smudge.width = Math.round(CW * dpr); smudge.height = Math.round(CH * dpr);
+    const c = smudge.getContext('2d'), rnd = rng(11);
+    const W = smudge.width, H = smudge.height;
+    c.clearRect(0, 0, W, H);
+    const blob = (x, y, rx, ry, rot, a) => {
+      c.save(); c.translate(x, y); c.rotate(rot); c.scale(1, ry / rx);
+      const g = c.createRadialGradient(0, 0, 0, 0, 0, rx);
+      g.addColorStop(0, `rgba(255,255,255,${a})`);
+      g.addColorStop(.6, `rgba(255,255,255,${a * .4})`);
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      c.fillStyle = g; c.beginPath(); c.arc(0, 0, rx, 0, Math.PI * 2); c.fill(); c.restore();
+    };
+    for (let i = 0; i < Math.round(40 * area); i++)
+      blob(rnd() * W, rnd() * H, (60 + rnd() * 160) * dpr, (40 + rnd() * 120) * dpr, rnd() * Math.PI, .025 + rnd() * .04);
+    for (let k = 0; k < Math.round(7 * area) + 2; k++) {
+      let x = rnd() * W, y = rnd() * H, a = rnd() * Math.PI * 2;
+      const turn = (rnd() - .5) * .05;
+      for (let i = 0; i < 22; i++) {
+        blob(x, y, (26 + rnd() * 20) * dpr, (6 + rnd() * 6) * dpr, a, .03 + rnd() * .03);
+        x += Math.cos(a) * 14 * dpr; y += Math.sin(a) * 14 * dpr; a += turn;
+      }
+    }
+    for (let i = 0; i < Math.round(6 * area) + 1; i++)
+      blob(rnd() * W, rnd() * H * .7, (22 + rnd() * 14) * dpr, (30 + rnd() * 16) * dpr, rnd() * Math.PI, .06 + rnd() * .04);
+    for (let i = 0; i < Math.round(90 * area); i++)
+      blob(rnd() * W, rnd() * H, (1.2 + rnd() * 2.6) * dpr, (1.2 + rnd() * 2.6) * dpr, 0, .25 + rnd() * .35);
+
+    // ---------- scratches (geometry only; lit per frame) ----------
+    scr.width = Math.round(CW * dpr); scr.height = Math.round(CH * dpr);
+    const R = rng(29);
+    scratches = [];
+    // one scratch = a gently curved polyline; each segment keeps its tangent and a depth value
+    const make = (x, y, ang, len, curve, depth, width) => {
+      const n = Math.max(3, Math.round(len / 6));
+      const nz = noise1(R), pts = [];
+      let a = ang, px = x, py = y;
+      for (let i = 0; i <= n; i++) {
+        const u = i / n;
+        const taper = Math.pow(Math.sin(Math.PI * u), .6);           // fine at both ends
+        let d = depth * taper * (.35 + .65 * nz(u));
+        if (nz(1 - u) < .22) d *= .08;                                  // breaks: the tip skipped
+        pts.push(px, py, d);
+        a += curve / n;
+        px += Math.cos(a) * len / n; py += Math.sin(a) * len / n;
+      }
+      scratches.push({ pts, width, minX: Math.min(x, px) - 10, maxX: Math.max(x, px) + 10,
+                       minY: Math.min(y, py) - 10, maxY: Math.max(y, py) + 10 });
+    };
+    // wipe clusters: many near-parallel arcs sharing a sweep, like a cloth dragged across
+    for (let k = 0; k < Math.round(14 * area) + 3; k++) {
+      const cx = R() * CW, cy = R() * CH, base = R() * Math.PI, curve = (R() - .5) * .9;
+      const count = 20 + Math.round(R() * 34);
+      for (let i = 0; i < count; i++) {
+        const off = (R() - .5) * 90;
+        const x = cx + Math.cos(base + Math.PI / 2) * off + (R() - .5) * 60;
+        const y = cy + Math.sin(base + Math.PI / 2) * off + (R() - .5) * 60;
+        make(x, y, base + (R() - .5) * .12, 30 + R() * 190, curve + (R() - .5) * .15,
+             .35 + R() * .5, .45 + R() * .3);
+      }
+    }
+    // a few long, deeper single scratches
+    for (let i = 0; i < Math.round(10 * area) + 2; i++)
+      make(R() * CW, R() * CH, R() * Math.PI * 2, 160 + R() * 420, (R() - .5) * .6, .7 + R() * .3, .7 + R() * .5);
+    // fine random sleeks
+    for (let i = 0; i < Math.round(700 * area); i++)
+      make(R() * CW, R() * CH, R() * Math.PI * 2, 4 + R() * 22, (R() - .5) * .4, .25 + R() * .45, .4 + R() * .25);
+  }
+
+  // Alpha is bucketed so each frame needs only a handful of stroke() calls
+  const LEVELS = 16;
+  const paths = Array.from({ length: LEVELS }, () => []);
+  function frame() {
+    const g = window.__glare || { x: .5, y: .4, on: 0 };
+    const lx = g.x * CW, ly = g.y * CH;
+    const reach = Math.min(CW, CH) * .42;
+    const gain = .28 + .72 * g.on;                 // near-invisible at rest, lit on hover
+    sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    sctx.clearRect(0, 0, CW, CH);
+    for (const p of paths) p.length = 0;
+
+    for (const s of scratches) {
+      if (s.maxX < lx - reach * 1.6 || s.minX > lx + reach * 1.6 ||
+          s.maxY < ly - reach * 1.6 || s.minY > ly + reach * 1.6) continue;
+      const P = s.pts;
+      for (let i = 0; i < P.length - 3; i += 3) {
+        const x0 = P[i], y0 = P[i + 1], x1 = P[i + 3], y1 = P[i + 4];
+        const depth = (P[i + 2] + P[i + 5]) * .5;
+        if (depth < .02) continue;
+        const mx = (x0 + x1) * .5, my = (y0 + y1) * .5;
+        const dx = mx - lx, dy = my - ly, dist = Math.hypot(dx, dy) || 1;
+        const fall = Math.exp(-(dist / reach) * (dist / reach));
+        if (fall < .02) continue;
+        // a scratch glints when it runs across the line to the light (tangent ⟂ radial)
+        let tx = x1 - x0, ty = y1 - y0; const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
+        const cos = (tx * dx + ty * dy) / dist;
+        const spec = Math.exp(-(cos * cos) / .06);
+        const b = Math.min(1, depth * fall * (.1 + .9 * spec) * gain * 1.7);
+        const lvl = Math.min(LEVELS - 1, Math.round(b * (LEVELS - 1)));
+        if (lvl < 1) continue;
+        paths[lvl].push(x0, y0, x1, y1, s.width);
+      }
+    }
+    sctx.lineCap = 'round';
+    for (let l = 1; l < LEVELS; l++) {
+      const p = paths[l]; if (!p.length) continue;
+      sctx.strokeStyle = `rgba(236,242,255,${(l / LEVELS).toFixed(3)})`;
+      // thin and thick scratches in two passes so widths stay true
+      for (const wide of [false, true]) {
+        sctx.lineWidth = wide ? 0.95 : 0.55;
+        sctx.beginPath();
+        for (let i = 0; i < p.length; i += 5) {
+          if ((p[i + 4] > .75) !== wide) continue;
+          sctx.moveTo(p[i], p[i + 1]); sctx.lineTo(p[i + 2], p[i + 3]);
+        }
+        sctx.stroke();
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  let t; addEventListener('resize', () => { clearTimeout(t); t = setTimeout(build, 150); });
+  build();
   requestAnimationFrame(frame);
 })();
 </script>
