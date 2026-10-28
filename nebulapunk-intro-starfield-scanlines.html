@@ -386,6 +386,32 @@
     -webkit-mask-image:linear-gradient(to bottom, #000 0%, #000 45%, transparent 70%);
             mask-image:linear-gradient(to bottom, #000 0%, #000 45%, transparent 70%);
   }
+  /* Glass: a glare that follows the same smoothed cursor as the prism, and hairline scratches
+     that only show where the glare lands. Position comes from --gx/--gy, set by the prism script. */
+  #hero { --gx:50%; --gy:40%; --g-on:0; }
+  .glass-glare, #glass-scratches {
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    pointer-events:none;
+    z-index:8;
+    -webkit-mask-image:linear-gradient(to bottom, #000 0%, #000 45%, transparent 72%);
+            mask-image:linear-gradient(to bottom, #000 0%, #000 45%, transparent 72%);
+  }
+  .glass-glare {
+    background:
+      /* soft hotspot */
+      radial-gradient(ellipse 22% 26% at var(--gx) var(--gy), rgba(255,255,255,.16) 0%, rgba(255,255,255,.05) 45%, transparent 100%),
+      /* broad diagonal sheen through the same point */
+      radial-gradient(ellipse 60% 14% at var(--gx) var(--gy), rgba(220,235,255,.07) 0%, transparent 100%);
+    mix-blend-mode:screen;
+    opacity:calc(.55 + .45 * var(--g-on));
+  }
+  #glass-scratches {
+    mix-blend-mode:screen;
+    opacity:calc(.5 + .5 * var(--g-on));
+    -webkit-mask-image:radial-gradient(ellipse 34% 40% at var(--gx) var(--gy), #000 0%, rgba(0,0,0,.35) 50%, transparent 100%);
+            mask-image:radial-gradient(ellipse 34% 40% at var(--gx) var(--gy), #000 0%, rgba(0,0,0,.35) 50%, transparent 100%);
+  }
   @keyframes scanRoll { from { background-position:0 130%; } to { background-position:0 -130%; } }
   @media (prefers-reduced-motion: reduce) { .scanroll { animation:none; } }
 </style>
@@ -401,6 +427,8 @@
     <div class="scanroll" aria-hidden="true"></div>
     <canvas id="crt-bloom" aria-hidden="true"></canvas>
     <div class="crt-vignette" aria-hidden="true"></div>
+    <div class="glass-glare" aria-hidden="true"></div>
+    <canvas id="glass-scratches" aria-hidden="true"></canvas>
   </div>
 </div>
 
@@ -1561,6 +1589,11 @@ requestAnimationFrame(loop);
                  + Math.max(-.3, Math.min(.3, (vy - vx * .4) * .03));
     rot += (target - rot) * .05;
 
+    // glass glare rides on the same smoothed point (slightly behind it, like a reflection)
+    hero.style.setProperty('--gx', (cx * 100).toFixed(2) + '%');
+    hero.style.setProperty('--gy', (cy * 100).toFixed(2) + '%');
+    hero.style.setProperty('--g-on', on.toFixed(3));
+
     const band = Math.min(W, H) * LEAK_WIDTH * (1 + Math.sin(s * .5) * .08);
     const len = Math.hypot(W, H) * 1.3;
     const step = band / SLICES;
@@ -1627,6 +1660,57 @@ requestAnimationFrame(loop);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+})();
+</script>
+<script>
+/* Glass scratches: drawn once (and on resize) with a fixed seed, so the pattern never changes.
+   Long faint hairline arcs, short clustered scuffs, and dust specks. */
+(() => {
+  const hero = document.getElementById('hero');
+  const cv = document.getElementById('glass-scratches');
+  const ctx = cv.getContext('2d');
+  function draw() {
+    const r = hero.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const W = cv.width = Math.max(1, Math.round(r.width * dpr));
+    const H = cv.height = Math.max(1, Math.round(r.height * dpr));
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const area = (W * H) / (dpr * dpr) / (1200 * 675);
+    ctx.clearRect(0, 0, W, H);
+    ctx.lineCap = 'round';
+
+    // long hairline arcs (wiping marks), mostly near-horizontal sweeps
+    for (let i = 0; i < Math.round(26 * area); i++) {
+      const x = rnd() * W, y = rnd() * H, len = (120 + rnd() * 420) * dpr;
+      const a = (rnd() - .5) * 1.2 + (rnd() < .5 ? 0 : Math.PI);
+      const bend = (rnd() - .5) * len * .35;
+      const x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len;
+      const mx = (x + x2) / 2 - Math.sin(a) * bend, my = (y + y2) / 2 + Math.cos(a) * bend;
+      ctx.strokeStyle = `rgba(255,255,255,${.12 + rnd() * .22})`;
+      ctx.lineWidth = (.4 + rnd() * .5) * dpr;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(mx, my, x2, y2); ctx.stroke();
+    }
+    // short scuffs in a few clusters
+    for (let c = 0; c < Math.round(5 * area) + 1; c++) {
+      const cx = rnd() * W, cy = rnd() * H * .7, a0 = rnd() * Math.PI;
+      for (let i = 0; i < 14; i++) {
+        const x = cx + (rnd() - .5) * 140 * dpr, y = cy + (rnd() - .5) * 90 * dpr;
+        const a = a0 + (rnd() - .5) * .5, len = (6 + rnd() * 34) * dpr;
+        ctx.strokeStyle = `rgba(255,255,255,${.15 + rnd() * .3})`;
+        ctx.lineWidth = (.4 + rnd() * .6) * dpr;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len); ctx.stroke();
+      }
+    }
+    // dust specks
+    for (let i = 0; i < Math.round(160 * area); i++) {
+      ctx.fillStyle = `rgba(255,255,255,${.1 + rnd() * .3})`;
+      const sz = (.5 + rnd() * 1.2) * dpr;
+      ctx.fillRect(rnd() * W, rnd() * H, sz, sz);
+    }
+  }
+  let t; addEventListener('resize', () => { clearTimeout(t); t = setTimeout(draw, 150); });
+  draw();
 })();
 </script>
 </body>
