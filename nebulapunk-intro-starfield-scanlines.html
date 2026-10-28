@@ -1777,7 +1777,7 @@ requestAnimationFrame(loop);
   const scr = document.getElementById('glass-scratch');
   const sctx = scr.getContext('2d');
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let CW = 1, CH = 1, dpr = 1, scratches = [];
+  let CW = 1, CH = 1, dpr = 1, scratches = [], micro = new Float32Array(0);
 
   const rng = s => () => (s = (s * 16807) % 2147483647) / 2147483647;
   // smooth 1D value noise along a scratch (intermittent, uneven depth)
@@ -1801,25 +1801,31 @@ requestAnimationFrame(loop);
     const blob = (x, y, rx, ry, rot, a) => {
       c.save(); c.translate(x, y); c.rotate(rot); c.scale(1, ry / rx);
       const g = c.createRadialGradient(0, 0, 0, 0, 0, rx);
+      // gaussian-like falloff, so every smudge reads as out of focus
       g.addColorStop(0, `rgba(255,255,255,${a})`);
-      g.addColorStop(.6, `rgba(255,255,255,${a * .4})`);
+      g.addColorStop(.3, `rgba(255,255,255,${a * .75})`);
+      g.addColorStop(.6, `rgba(255,255,255,${a * .3})`);
+      g.addColorStop(.85, `rgba(255,255,255,${a * .08})`);
       g.addColorStop(1, 'rgba(255,255,255,0)');
       c.fillStyle = g; c.beginPath(); c.arc(0, 0, rx, 0, Math.PI * 2); c.fill(); c.restore();
     };
     for (let i = 0; i < Math.round(40 * area); i++)
-      blob(rnd() * W, rnd() * H, (60 + rnd() * 160) * dpr, (40 + rnd() * 120) * dpr, rnd() * Math.PI, .025 + rnd() * .04);
+      blob(rnd() * W, rnd() * H, (100 + rnd() * 260) * dpr, (70 + rnd() * 190) * dpr, rnd() * Math.PI, .025 + rnd() * .04);
     for (let k = 0; k < Math.round(7 * area) + 2; k++) {
       let x = rnd() * W, y = rnd() * H, a = rnd() * Math.PI * 2;
       const turn = (rnd() - .5) * .05;
       for (let i = 0; i < 22; i++) {
-        blob(x, y, (26 + rnd() * 20) * dpr, (6 + rnd() * 6) * dpr, a, .03 + rnd() * .03);
-        x += Math.cos(a) * 14 * dpr; y += Math.sin(a) * 14 * dpr; a += turn;
+        blob(x, y, (45 + rnd() * 35) * dpr, (14 + rnd() * 10) * dpr, a, .03 + rnd() * .03);
+        x += Math.cos(a) * 20 * dpr; y += Math.sin(a) * 20 * dpr; a += turn;
       }
     }
     for (let i = 0; i < Math.round(6 * area) + 1; i++)
-      blob(rnd() * W, rnd() * H * .7, (22 + rnd() * 14) * dpr, (30 + rnd() * 16) * dpr, rnd() * Math.PI, .06 + rnd() * .04);
-    for (let i = 0; i < Math.round(90 * area); i++)
-      blob(rnd() * W, rnd() * H, (1.2 + rnd() * 2.6) * dpr, (1.2 + rnd() * 2.6) * dpr, 0, .25 + rnd() * .35);
+      blob(rnd() * W, rnd() * H * .7, (40 + rnd() * 20) * dpr, (55 + rnd() * 25) * dpr, rnd() * Math.PI, .06 + rnd() * .04);
+    // dust, now as soft out-of-focus discs
+    for (let i = 0; i < Math.round(60 * area); i++) {
+      const d = (2.5 + rnd() * 3.5) * dpr;
+      blob(rnd() * W, rnd() * H, d, d, 0, .14 + rnd() * .16);
+    }
 
     // ---------- scratches (geometry only; lit per frame) ----------
     scr.width = Math.round(CW * dpr); scr.height = Math.round(CH * dpr);
@@ -1860,11 +1866,25 @@ requestAnimationFrame(loop);
     // fine random sleeks
     for (let i = 0; i < Math.round(700 * area); i++)
       make(R() * CW, R() * CH, R() * Math.PI * 2, 4 + R() * 22, (R() - .5) * .4, .25 + R() * .45, .4 + R() * .25);
+
+    // micro scratches: tiny straight nicks (x0, y0, x1, y1, depth), spread evenly with a few denser patches
+    const M = rng(53), nMicro = Math.round(3200 * area);
+    micro = new Float32Array(nMicro * 5);
+    const patches = Array.from({ length: 6 }, () => [M() * CW, M() * CH, 60 + M() * 120]);
+    for (let i = 0; i < nMicro; i++) {
+      let x, y;
+      if (M() < .4) { const [px, py, pr] = patches[Math.floor(M() * patches.length)];
+                       const a = M() * Math.PI * 2, d = pr * Math.sqrt(M()); x = px + Math.cos(a) * d; y = py + Math.sin(a) * d; }
+      else { x = M() * CW; y = M() * CH; }
+      const a = M() * Math.PI * 2, len = 1.5 + M() * 4.5;
+      micro.set([x, y, x + Math.cos(a) * len, y + Math.sin(a) * len, .45 + M() * .55], i * 5);
+    }
   }
 
   // Alpha is bucketed so each frame needs only a handful of stroke() calls
   const LEVELS = 16;
   const paths = Array.from({ length: LEVELS }, () => []);
+  const microPaths = Array.from({ length: LEVELS }, () => []);
   function frame() {
     const g = window.__glare || { x: .5, y: .4, on: 0 };
     const lx = g.x * CW, ly = g.y * CH;
@@ -1896,7 +1916,34 @@ requestAnimationFrame(loop);
         paths[lvl].push(x0, y0, x1, y1, s.width);
       }
     }
+    // micro scratches: same lighting rule with a much narrower angle, so they sparkle rather than glow
+    const mp = microPaths; for (const p of mp) p.length = 0;
+    const r2 = reach * 1.6;
+    for (let i = 0; i < micro.length; i += 5) {
+      const x0 = micro[i], y0 = micro[i + 1];
+      const dx = x0 - lx, dy = y0 - ly;
+      if (dx > r2 || dx < -r2 || dy > r2 || dy < -r2) continue;
+      const dist = Math.hypot(dx, dy) || 1;
+      const fall = Math.exp(-(dist / reach) * (dist / reach));
+      if (fall < .03) continue;
+      let tx = micro[i + 2] - x0, ty = micro[i + 3] - y0; const tl = Math.hypot(tx, ty) || 1;
+      const cos = (tx * dx + ty * dy) / (tl * dist);
+      const spec = Math.exp(-(cos * cos) / .015);
+      const b = Math.min(1, micro[i + 4] * fall * spec * gain * 2.6);
+      const lvl = Math.min(LEVELS - 1, Math.round(b * (LEVELS - 1)));
+      if (lvl < 1) continue;
+      mp[lvl].push(x0, y0, micro[i + 2], micro[i + 3]);
+    }
     sctx.lineCap = 'round';
+    sctx.lineWidth = 0.35;
+    for (let l = 1; l < LEVELS; l++) {
+      const p = mp[l]; if (!p.length) continue;
+      sctx.strokeStyle = `rgba(255,255,255,${(l / LEVELS).toFixed(3)})`;
+      sctx.beginPath();
+      for (let i = 0; i < p.length; i += 4) { sctx.moveTo(p[i], p[i + 1]); sctx.lineTo(p[i + 2], p[i + 3]); }
+      sctx.stroke();
+    }
+
     for (let l = 1; l < LEVELS; l++) {
       const p = paths[l]; if (!p.length) continue;
       sctx.strokeStyle = `rgba(236,242,255,${(l / LEVELS).toFixed(3)})`;
