@@ -908,7 +908,8 @@ const webMat = new THREE.ShaderMaterial({
   fragmentShader:`
     varying vec3 vColor;
     varying float vAlpha;
-    void main(){ gl_FragColor = vec4(vColor, vAlpha); }
+    // boosted so the constellation reads above the rings, glare and glass
+    void main(){ gl_FragColor = vec4(min(vec3(1.0), vColor * 1.35 + vec3(0.07)), min(1.0, vAlpha * 2.0)); }
   `,
 });
 const webLines = new THREE.LineSegments(webGeo, webMat);
@@ -1612,6 +1613,19 @@ function loop(){
       c2.globalCompositeOperation = 'source-over';
       octx.globalCompositeOperation = 'lighter';
       octx.drawImage(ca, mouse.x - R, mouse.y - R);
+      octx.globalCompositeOperation = 'source-over';
+    }
+    // rings step back around the cursor so the constellation forming there stays the focus
+    if(caOn > 0.01 && mouse.inside){
+      const FR = 200;
+      const fg = octx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, FR);
+      fg.addColorStop(0, `rgba(0,0,0,${(0.6 * caOn).toFixed(3)})`);
+      fg.addColorStop(0.55, `rgba(0,0,0,${(0.35 * caOn).toFixed(3)})`);
+      fg.addColorStop(1, 'rgba(0,0,0,0)');
+      octx.globalCompositeOperation = 'destination-out';
+      octx.shadowBlur = 0;
+      octx.fillStyle = fg;
+      octx.fillRect(mouse.x - FR, mouse.y - FR, FR * 2, FR * 2);
       octx.globalCompositeOperation = 'source-over';
     }
     octx.restore();
