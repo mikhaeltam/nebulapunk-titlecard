@@ -13,6 +13,7 @@ canvas { position:absolute; inset:0; pointer-events:none; }
    Scan lines + slow roll, chromatic aberration around the cursor, glass glare,
    smudges and light-reactive scratches. All layers ignore the mouse. */
 .fx-layer { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+#cv         { filter:brightness(1.35) saturate(1.1); }   /* the card's own animation, brightened */
 #fx-ca      { z-index:1; mix-blend-mode:screen; }
 /* faint rainbow light leak that passes through the cursor (same as the intro starfield) */
 #fx-leak    { z-index:1; mix-blend-mode:screen; opacity:.22; filter:blur(40px) saturate(1.1); }
@@ -24,11 +25,11 @@ canvas { position:absolute; inset:0; pointer-events:none; }
 .card { --gx:50%; --gy:40%; --g-on:0; }
 .fx-glare   { z-index:3; mix-blend-mode:screen; opacity:calc(.55 + .45 * var(--g-on));
               background:
-                radial-gradient(ellipse 26% 30% at var(--gx) var(--gy), rgba(255,255,255,.13) 0%, rgba(255,255,255,.04) 45%, transparent 100%),
-                radial-gradient(ellipse 70% 16% at var(--gx) var(--gy), rgba(220,235,255,.06) 0%, transparent 100%); }
+                radial-gradient(ellipse 38% 44% at var(--gx) var(--gy), rgba(255,255,255,.13) 0%, rgba(255,255,255,.04) 45%, transparent 100%),
+                radial-gradient(ellipse 95% 22% at var(--gx) var(--gy), rgba(220,235,255,.06) 0%, transparent 100%); }
 #fx-smudge  { z-index:3; mix-blend-mode:screen; opacity:calc(.35 + .65 * var(--g-on));
-              -webkit-mask-image:radial-gradient(ellipse 40% 46% at var(--gx) var(--gy), #000 0%, rgba(0,0,0,.35) 50%, transparent 100%);
-                      mask-image:radial-gradient(ellipse 40% 46% at var(--gx) var(--gy), #000 0%, rgba(0,0,0,.35) 50%, transparent 100%); }
+              -webkit-mask-image:radial-gradient(ellipse 56% 62% at var(--gx) var(--gy), #000 0%, rgba(0,0,0,.35) 50%, transparent 100%);
+                      mask-image:radial-gradient(ellipse 56% 62% at var(--gx) var(--gy), #000 0%, rgba(0,0,0,.35) 50%, transparent 100%); }
 #fx-scratch { z-index:3; mix-blend-mode:screen; }
 @media (prefers-reduced-motion: reduce) { .fx-roll { animation:none; } }
 </style>
@@ -287,7 +288,7 @@ resize(); draw();
     CW = Math.max(1, card.offsetWidth); CH = Math.max(1, card.offsetHeight);
     dpr = Math.min(2, window.devicePixelRatio || 1);
     const area = (CW * CH) / (1200 * 675);
-    const sc = Math.max(.45, Math.min(1, Math.min(CW, CH) / 600));   // scale marks to the card size
+    const sc = Math.max(.85, Math.min(1.2, Math.min(CW, CH) / 380));  // marks stay a readable size on small cards
 
     // ----- smudges -----
     smCv.width = Math.round(CW * dpr); smCv.height = Math.round(CH * dpr);
@@ -349,7 +350,7 @@ resize(); draw();
       if (M() < .4) { const [px, py, pr] = patches[Math.floor(M() * 6)]; const a = M() * Math.PI * 2, d = pr * Math.sqrt(M());
                        x = px + Math.cos(a) * d; y = py + Math.sin(a) * d; }
       else { x = M() * CW; y = M() * CH; }
-      const a = M() * Math.PI * 2, len = 1.5 + M() * 4.5;
+      const a = M() * Math.PI * 2, len = (1.5 + M() * 4.5) * Math.max(1, sc * 1.3);
       micro.set([x, y, x + Math.cos(a) * len, y + Math.sin(a) * len, .45 + M() * .55], i * 5);
     }
 
@@ -436,7 +437,7 @@ resize(); draw();
   const LEVELS = 16;
   const paths = Array.from({ length: LEVELS }, () => []), microPaths = Array.from({ length: LEVELS }, () => []);
   function scratchesFrame(lx, ly) {
-    const reach = Math.min(CW, CH) * .42, gain = .28 + .72 * on;
+    const reach = Math.min(CW, CH) * .6, gain = .28 + .72 * on;
     scX.setTransform(dpr, 0, 0, dpr, 0, 0); scX.clearRect(0, 0, CW, CH);
     for (const p of paths) p.length = 0; for (const p of microPaths) p.length = 0;
     const r2 = reach * 1.6;
