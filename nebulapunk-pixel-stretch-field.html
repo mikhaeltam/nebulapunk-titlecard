@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Nebulapunk — Pixel Stretch Field</title>
+<!--
+  The pixel stretch as a field that runs the whole length of the feature section, with no dark middle.
+  Two iframes of this file are used on the Superhive page (see superhive-pixel-stretch-field.html):
+
+    mode=main  strands pour down out of white over the first `top` px (default 360), then carry on as a
+               field of stretched streaks (silver, steel blue, navy, a few iridescent) all the way down.
+               Make the iframe taller than the content; the page clips it.
+    mode=out   transparent over the first `blend` px (default 200), fading in a field of its own so it
+               melts over the end of the main field without a seam; then the strands rise back into white
+               over the last `fade` px (default 360).
+
+  Every column is a streak whose colour changes slowly along its length, sliding up or down at its own
+  pace. Near the cursor, columns brighten, flutter and catch a soft light, as in the other versions. The
+  main iframe is very tall, so it uses a canvas about a screen tall that follows the visible part and draws
+  at 30fps when the top strands are off screen. Both pause while off screen.
+-->
+<style>
+html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:transparent; }
+#wrap { position:relative; width:100%; height:100%; overflow:hidden; }
+#gl { position:absolute; left:0; top:0; width:100%; height:100%; display:block; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="gl" aria-hidden="true"></canvas></div>
+
+<script>
+(() => {
+  const wrap = document.getElementById('wrap');
+  const cv = document.getElementById('gl');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---------- settings from the URL ----------
+  const Q = new URLSearchParams(location.search);
+  const num = (k, d) => { const v = parseFloat(Q.get(k)); return isFinite(v) && v >= 0 ? v : d; };
+  const MODE = Q.get('mode') === 'out' ? 'out' : 'main';
+  const OUT = MODE === 'out';
+  const TOP = Math.max(1, num('top', 360)), BLEND = Math.max(1, num('blend', 200)), FADE = Math.max(1, num('fade', 360));
+  const FIELDCSS = 'rgb(58,78,122)';               // average colour of the field, for the static fallback
+  function fallback(h) {
+    document.documentElement.style.background = OUT
+      ? `linear-gradient(rgba(58,78,122,0) 0px, ${FIELDCSS} ${BLEND}px, ${FIELDCSS} ${Math.max(BLEND, h - FADE)}px, #fff ${h - FADE * .25}px, #fff 100%)`
+      : `linear-gradient(#fff 0px, #fff ${TOP * .25}px, ${FIELDCSS} ${TOP}px, ${FIELDCSS} 100%)`;
+  }
+  fallback(innerHeight);
+
+  const gl = cv.getContext('webgl', { antialias:false, alpha:OUT, premultipliedAlpha:true, powerPreference:'high-performance' });
+  if (!gl) { cv.style.display = 'none'; return; }
+  const fext = gl.getExtension('OES_texture_float');
+
+  // ---------- tuning ----------
+  const REACH  = 160;   // px either side of the cursor where columns gain energy
+  const IDLE   = .20;   // how far the white ends move on their own
+  const EXCITE = .42;   // extra movement near the cursor
+  const SPEED  = .95;   // global tempo; lower feels calmer
+  const IRID   = 1;     // how many iridescent strands (0 none, 1 default, 2 lots)
+  const LIGHT  = .55;   // strength of the soft light that follows the cursor
+  const WAVE   = .45;   // strength of the puffs from the cursor, clicks and idle gusts (0 turns them off)
+  const FLUTTER = .14;  // light, quick flutter of strands near the cursor
+  const DROPS  = [5, 11];// seconds between idle puffs (min, max)
+  const GHOSTS = 3;     // invisible drifting sources that keep slow ripples moving when idle
+  const STRETCH = [160, 900];   // px: how long a streak of one colour runs (shortest, longest)
+  const DRIFT  = [4, 22];       // px/s: how fast streaks slide along their column (slowest, fastest)
+
+  const vs = `attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }`;
+  const fs = `
+    precision highp float;
+    uniform vec2  uRes;
+    uniform float uT;
+    uniform float uDpr;
+    uniform float uCols;
+    uniform float uOff;       // where the canvas sits in the iframe (CSS px); only moves in main mode
+    uniform float uMode;      // 0 main, 1 out
+    uniform vec4  uZ;         // main: top strand height. out: blend, fade start, end (CSS px)
+    uniform vec4  uScale;     // decodes the column texture (all 1.0 with float textures)
+    uniform vec3  uLight;     // cursor light: x and y in CSS px, strength
+    uniform float uBroad;     // slow drift of the broad light and dark regions
+    uniform sampler2D uCol;   // 5 rows per column. Rows 0/2 (top/bottom strands): -, white length,
+                              // brightness, saturation. Rows 1/3: iridescence, hue phase.
+                              // Row 4: streak length (px), drift (noise units), bias, -.
+
+    const vec3  SILVER = vec3(.92, .95, 1.00);
+    const vec3  STEEL  = vec3(.33, .47, .76);
+    const vec3  NAVY   = vec3(.047, .033, .087);
+    const float WHITE  = 2.6;   // HDR white; the tone curve is normalised so this lands on pure #fff
+
+    float h1(float n){ return fract(sin(n * 12.9898) * 43758.5453); }
+    float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y); }
+    float n1(float x){ float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(h1(i), h1(i + 1.0), f); }
+    float ign(vec2 p){ return fract(52.9829189 * fract(dot(p, vec2(.06711056, .00583715)))); }
+    vec3 aces(vec3 x){ return clamp(x * (2.51 * x + .03) / (x * (2.43 * x + .59) + .14), 0.0, 1.0); }
+    vec4 row(float c, float r){ return texture2D(uCol, vec2((c + .5) / uCols, (r + .5) / 5.0)); }
+
+    // one column of the field at height py; settle 0..1 eases it in from silver near a white end
+    vec3 streak(float c, float py, vec4 p, float irRow, float settle){
+      vec4 f = row(c, 4.0) * vec4(uScale.x > 1.5 ? 1000.0 : 1.0, uScale.x > 1.5 ? 100.0 : 1.0, 1.0, 1.0);
+      float L = max(f.r, 40.0);
+      float v = .62 * n1(py / L + f.g + c * 7.31) + .38 * n1(py / (L * .37) + f.g * 1.7 + c * 3.17 + 50.0);
+      // broad regions shared by neighbouring columns, so the field has deep navy and bright silver areas
+      // instead of every column varying on its own
+      float broad = .6 * n2(vec2(c / 46.0, py / 620.0 + uBroad)) + .4 * n2(vec2(c / 13.0 + 31.0, py / 260.0 - uBroad * 1.6));
+      v = .42 * v + .45 * broad + .13 * f.b;
+      v = smoothstep(.2, .8, v);
+      float tt = mix(.02, 1.3, v) * smoothstep(0.0, .9, settle);
+      vec3 g = mix(SILVER, STEEL, smoothstep(0.0, .55, tt));
+      g = mix(g, NAVY, smoothstep(.45, 1.35, tt));
+      vec3 col = g * p.z;
+      float grey = dot(col, vec3(.299, .587, .114));
+      col = mix(vec3(grey), col, p.w);
+      vec4 ir = row(c, irRow);
+      if (ir.r > .002) {                          // iridescent streaks: hue runs along the column
+        float hue = ir.g + py / 700.0 + v * .6;
+        vec3 film = .5 + .5 * cos(6.2832 * (hue + vec3(0.0, .33, .67)));
+        film = mix(vec3(dot(film, vec3(.333))), film, .85);
+        col = mix(col, film * max(grey, .1) * 2.2, ir.r * smoothstep(.15, .5, tt) * (1.0 - smoothstep(.95, 1.3, tt)));
+      }
+      return col;
+    }
+
+    vec3 field(float c, float py){
+      if (uMode < .5) {
+        float y = py / uZ.x;
+        vec4 p = row(c, 0.0) * uScale;
+        vec3 col = streak(c, py, p, 1.0, y);
+        if (y < 1.0) { float w = 1.0 - smoothstep(0.0, 1.0, y / max(p.y, .001)); col = mix(col, vec3(WHITE), w * w * (3.0 - 2.0 * w)); }
+        return col;
+      }
+      float yb = (uZ.z - py) / max(uZ.z - uZ.y, 1.0);   // 0 at the bottom edge, 1 where the field is full
+      vec4 p = row(c, 2.0) * uScale;
+      vec3 col = streak(c, py, p, 3.0, yb);
+      if (yb < 1.0) { float w = 1.0 - smoothstep(0.0, 1.0, yb / max(p.y, .001)); col = mix(col, vec3(WHITE), w * w * (3.0 - 2.0 * w)); }
+      return col;
+    }
+
+    void main(){
+      vec2 css = uRes / uDpr;
+      vec2 fc = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uDpr;   // CSS px within the canvas, y down
+      float py = fc.y + uOff;                                             // CSS px within the iframe
+      float c = floor(fc.x);
+      vec3 col = field(c, py);
+
+      // soft bloom near the white ends, where it shows: bright neighbours bleed a little light sideways
+      bool nearWhite = uMode < .5 ? py < uZ.x * 1.1 : py > uZ.y - 40.0;
+      if (nearWhite) {
+        vec3 bloom = vec3(0.0);
+        for (int i = 1; i <= 3; i++) {
+          float d = float(i * i) * 2.0;
+          float w = .07 / float(i);
+          bloom += w * (min(max(field(c - d, py) - 1.0, 0.0), vec3(.6)) +
+                        min(max(field(c + d, py) - 1.0, 0.0), vec3(.6)));
+        }
+        col += bloom * vec3(.85, .92, 1.0);
+      }
+
+      // slow diagonal light sweep, like light passing over brushed metal
+      float u = fc.x / css.x;
+      float sweep = mix(-.5, 1.7, fract(uT / 13.0));
+      float s = (u - (fc.y / css.y) * .3 - sweep) * 6.0;
+      float sheen = exp(-s * s);
+
+      // soft light that follows the cursor, taller than it is wide
+      vec2 dl = vec2(fc.x - uLight.x, (py - uLight.y) * .55);
+      float L = uLight.z * exp(-dot(dl, dl) / (2.0 * 170.0 * 170.0));
+
+      col *= 1.0 + .28 * sheen + L;
+      col = aces(col) / aces(vec3(WHITE)).r;          // normalised: WHITE maps to exactly 1.0
+      col = min(col, 1.0);
+
+      // fine film grain at 24fps; doubles as dither (none on pure white)
+      float n = ign(gl_FragCoord.xy + mod(floor(uT * 24.0), 64.0) * vec2(5.588, 3.17)) - .5;
+      col += n * (3.0 / 255.0) * (1.0 - smoothstep(.97, 1.0, min(col.r, min(col.g, col.b))));
+      col = clamp(col, 0.0, 1.0);
+
+      // out mode fades in over its first blend px, so it melts over the end of the main field
+      float a = uMode < .5 ? 1.0 : smoothstep(0.0, uZ.x, py);
+      gl_FragColor = vec4(col * a, a);
+    }`;
+
+  function sh(type, code) { const s = gl.createShader(type); gl.shaderSource(s, code); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog); gl.useProgram(prog);
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const U = n => gl.getUniformLocation(prog, n);
+  const uRes = U('uRes'), uT = U('uT'), uDpr = U('uDpr'), uCols = U('uCols'), uLight = U('uLight'), uOff = U('uOff'), uZ = U('uZ'), uBroad = U('uBroad');
+  gl.uniform1i(U('uCol'), 0);
+  gl.uniform1f(U('uMode'), OUT ? 1 : 0);
+  const SCALE = fext ? [1, 1, 1, 1] : [2.0, 1.6, 2.6, 1.4];   // byte fallback packs values into 0..1
+  gl.uniform4f(U('uScale'), SCALE[0], SCALE[1], SCALE[2], SCALE[3]);
+
+  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const TYPE = fext ? gl.FLOAT : gl.UNSIGNED_BYTE;
+
+  // ---------- seeded randomness and 1D value noise ----------
+  let seed = 13;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const TBL = new Float32Array(1024); for (let i = 0; i < 1024; i++) TBL[i] = rnd();
+  const vn = x => { const i = Math.floor(x), f = x - i, s = f * f * (3 - 2 * f);
+    const a = TBL[i & 1023], b = TBL[(i + 1) & 1023]; return a + (b - a) * s; };
+  const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+  // ---------- per-column character (two strand sets: top and bottom) and shared energy springs ----------
+  // strand arrays hold 2N entries: [0, N) is the top set, [N, 2N) the bottom set
+  let N = 0, en, ev, k1, d1, wu, wv, L0, S0, WL0, H2, H4, R2, IR, HP, HR, SL, SD, SB, SO, data;
+  let dpr = 1, W = 1, H = 1, CH = 1, winTop = 0, END = 1;
+  function resize() {
+    W = wrap.clientWidth; H = wrap.clientHeight;
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    // main mode: the iframe is very tall, so the canvas is only about a screen tall and follows the view
+    CH = OUT ? H : Math.min(H, Math.ceil((screen.height || 1200) + 800));
+    cv.style.height = CH + 'px';
+    winTop = Math.min(winTop, Math.max(0, H - CH)); cv.style.top = winTop + 'px';
+    cv.width = Math.max(1, Math.round(W * dpr)); cv.height = Math.max(1, Math.round(CH * dpr));
+    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    fallback(H);
+    END = H;
+    if (OUT) gl.uniform4f(uZ, BLEND, Math.max(BLEND, H - FADE), H, 0); else gl.uniform4f(uZ, TOP, 0, 0, 0);
+    N = Math.max(1, Math.ceil(W));
+    const F = () => new Float32Array(N), F2 = () => new Float32Array(2 * N);
+    en = F(); ev = F(); k1 = F(); d1 = F(); wu = F(); wv = F();
+    SL = F(); SD = F(); SB = F(); SO = F();
+    L0 = F2(); S0 = F2(); WL0 = F2(); H2 = F2(); H4 = F2(); R2 = F2(); IR = F2(); HP = F2(); HR = F2();
+    seed = 29;                                       // same look after every resize
+    for (let i = 0; i < N; i++) {
+      k1[i] = .02 + rnd() * .05; d1[i] = .84 + rnd() * .06;    // each column its own pace
+      // the streaks: how long each colour runs, how fast and which way it slides, and a lean toward
+      // silver or navy shared loosely with the neighbours, so the field has broad lighter and darker bands
+      SL[i] = STRETCH[0] + (STRETCH[1] - STRETCH[0]) * Math.pow(rnd(), 1.4);
+      SD[i] = (DRIFT[0] + (DRIFT[1] - DRIFT[0]) * rnd()) * (vn(i / 25 + 500) < .5 ? -1 : 1);
+      SB[i] = .25 + .55 * (.6 * vn(i / 18 + 700) + .4 * vn(i / 90 + 720));
+      SO[i] = rnd() * 100;
+    }
+    for (let k = 0; k < 2 * N; k++) {
+      const i = k < N ? k : k - N + 1337;            // the bottom set reads the noise elsewhere, so it isn't a mirror
+      H2[k] = rnd(); H4[k] = rnd();
+      const mid = vn(i / 6 + 17), broad = vn(i / 70 + 41), pick = rnd(), h5 = rnd();
+      let lum = .3 + .8 * (.25 * rnd() + .42 * mid + .33 * broad);
+      const pale = pick > .76;                       // about a quarter are pale silver strands
+      if (pale) lum *= 1.2 + .25 * h5;
+      if (pick < .1) lum *= .55 + .4 * rnd();        // a few sit back in shadow
+      L0[k] = lum;
+      S0[k] = pale ? .08 + .3 * h5 : .6 + .55 * h5;
+      WL0[k] = .06 + .6 * (vn(i / 4 + 77) * .5 + rnd() * .3 + vn(i / 60 + 5) * .2);
+      R2[k] = .1 + .3 * rnd();                       // pace of the white end's organic drift
+      const lo = .945 - .045 * Math.min(2, IRID);    // iridescent strands come in small clusters
+      IR[k] = IRID > 0 ? ss(lo, lo + .08, vn(i / 2.5 + 600)) * (.55 + .45 * rnd()) : 0;
+      HP[k] = vn(i / 4 + 800) * 2 + .15 * rnd();
+      HR[k] = (.03 + .06 * rnd()) * (vn(i / 30 + 900) < .5 ? -1 : 1);   // hue drift speed and direction
+    }
+    data = fext ? new Float32Array(N * 20) : new Uint8Array(N * 20);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, N, 5, 0, gl.RGBA, TYPE, data);
+    gl.uniform1f(uCols, N);
+    if (!OUT) sentinels();
+  }
+
+  // ---------- what's on screen ----------
+  let visible = true, visTop = 0, visBot = 1e9;
+  const vis = new Map(); let io = null;
+  function sentinels() {                             // main mode: 100px slices report what part is visible
+    if (!('IntersectionObserver' in window)) return;
+    if (io) io.disconnect();
+    wrap.querySelectorAll('.sn').forEach(n => n.remove()); vis.clear();
+    io = new IntersectionObserver(es => {
+      for (const e of es) {
+        const r = e.intersectionRect;
+        if (e.isIntersecting && r.height > 0) vis.set(e.target, [r.top, r.bottom]); else vis.delete(e.target);
+      }
+      if (!vis.size) { visible = false; return; }
+      visTop = Infinity; visBot = -Infinity;
+      for (const [t, b] of vis.values()) { visTop = Math.min(visTop, t); visBot = Math.max(visBot, b); }
+      visible = true; run();
+    }, { threshold: [0, .25, .5, .75, 1] });
+    for (let y = 0; y < H; y += 100) {
+      const n = document.createElement('div'); n.className = 'sn';
+      n.style.cssText = `position:absolute;left:0;width:1px;top:${y}px;height:${Math.min(100, H - y)}px;pointer-events:none;`;
+      wrap.appendChild(n); io.observe(n);
+    }
+  }
+  addEventListener('resize', resize); resize();
+
+  // ---------- pointer (reaches the field wherever no panel is over it) ----------
+  let mx = -1e4, my = 0, lx = -1e4, ly = 0, speed = 0, present = false, presence = 0, pv = 0;
+  const clicks = [];
+  function move(e) {
+    const r = wrap.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    if (present) { speed += Math.abs(x - mx); pv += Math.hypot(x - mx, y - my); }
+    else { lx = x; ly = y; }                         // light appears where you enter
+    mx = x; my = y; present = true;
+  }
+  wrap.addEventListener('pointermove', move);
+  wrap.addEventListener('pointerdown', e => { move(e); clicks.push(mx); });
+  wrap.addEventListener('pointerleave', () => { present = false; });
+  wrap.addEventListener('pointerup', e => { if (e.pointerType !== 'mouse') present = false; });
+
+  function step() {                                  // fixed 60Hz tick
+    presence += ((present ? 1 : 0) - presence) * .05;
+    speed *= .9;
+    const level = presence * (.55 + .45 * Math.min(1, speed / 60));   // a resting cursor still warms its columns
+    for (let i = 0; i < N; i++) {
+      const d = (i - mx) / REACH, target = Math.exp(-d * d) * level;
+      ev[i] = (ev[i] + (target - en[i]) * k1[i]) * d1[i];             // eases in and out with a little weight
+      en[i] = Math.max(0, Math.min(1.2, en[i] + ev[i]));
+    }
+    // airy puffs: the cursor's wake, clicks, idle puffs and slow drifting gusts
+    if (present) bump(mx, Math.min(pv, 60) * .006 * WAVE, 30);
+    pv = 0;
+    while (clicks.length) bump(clicks.pop(), .8 * WAVE, 26);
+    if (!reduce && WAVE > 0) {
+      const ts = ++tk / 60;
+      if (--nextDrop <= 0) {
+        bump(Math.random() * N, (.25 + .25 * Math.random()) * WAVE, 20 + 25 * Math.random());
+        nextDrop = 60 * (DROPS[0] + (DROPS[1] - DROPS[0]) * Math.random());
+      }
+      for (let g = 0; g < GHOSTS; g++) {
+        const gx = N * (-.1 + 1.2 * vn(ts * .06 * (1 + .35 * g) + g * 37.1 + 300));
+        bump(gx, .01 * WAVE * (.5 + .5 * Math.sin(ts * (.7 + .3 * g) + g * 2.1)), 40 + 20 * g);
+      }
+    }
+    for (let s = 0; s < 4; s++) {                    // damped field: spreads a little, settles in ~0.3s, no ringing
+      for (let i = 0; i < N; i++) {
+        const l = wu[i > 0 ? i - 1 : 0], r = wu[i < N - 1 ? i + 1 : N - 1];
+        wv[i] = (wv[i] + .2 * (l + r - 2 * wu[i]) - .0015 * wu[i]) * .982;
+      }
+      for (let i = 0; i < N; i++) wu[i] = Math.max(-1.2, Math.min(1.2, wu[i] + wv[i]));
+    }
+  }
+  let tk = 0, nextDrop = 120;
+  function bump(x, a, w) {                           // add a smooth displacement pulse to the field
+    const lo = Math.max(0, Math.floor(x - 3 * w)), hi = Math.min(N - 1, Math.ceil(x + 3 * w));
+    for (let i = lo; i <= hi; i++) { const d = (i - x) / w; wu[i] += a * Math.exp(-d * d); }
+  }
+
+  const TAU = Math.PI * 2;
+  const q = (v, s) => Math.round(Math.min(1, Math.max(0, v / s)) * 255);
+  function put(row, i, a, b, c, d, sc) {
+    const o = (row * N + i) * 4;
+    if (fext) { data[o] = a; data[o + 1] = b; data[o + 2] = c; data[o + 3] = d; }
+    else { data[o] = q(a, sc[0]); data[o + 1] = q(b, sc[1]); data[o + 2] = q(c, sc[2]); data[o + 3] = q(d, sc[3]); }
+  }
+  const ONE = [1, 1, 1, 1], FSC = [1000, 100, 1, 1];
+
+  let last = 0, acc = 0, running = false, frameNo = 0;
+  if (OUT && 'IntersectionObserver' in window)
+    new IntersectionObserver(es => { visible = es[es.length - 1].isIntersecting; if (visible) run(); }).observe(cv);
+
+  function frame(now) {
+    if (!visible) { running = false; return; }      // paused while scrolled off screen
+    if (!last) last = now;
+    const dt = Math.min(.1, (now - last) / 1000); last = now;
+    acc += dt; while (acc >= 1 / 60) { step(); acc -= 1 / 60; }
+    // main mode: once the top strands are off screen the field only drifts, so 30fps is plenty
+    if (!OUT && visTop > TOP + 100 && (frameNo++ & 1)) { requestAnimationFrame(frame); return; }
+    const kk = 1 - Math.exp(-dt * 6); lx += (mx - lx) * kk; ly += (my - ly) * kk;
+    const t = reduce ? 0 : now / 1000 * SPEED;
+
+    if (!OUT && vis.size) {                         // keep the canvas over the visible part, with margin
+      const span = visBot - visTop;
+      if (visTop - 150 < winTop || visBot + 150 > winTop + CH) {
+        winTop = Math.round(Math.max(0, Math.min(H - CH, visTop - (CH - span) / 2)));
+        cv.style.top = winTop + 'px';
+      }
+    }
+
+    const s = OUT ? 1 : 0;                           // the strand set this mode shows
+    for (let i = 0; i < N; i++) {
+      const k = s * N + i, ii = i + s * 1337;
+      const e = en[i], amp = IDLE + EXCITE * e, w = wu[i];
+      const n2 = vn(t * R2[k] + ii * 5.3 + 400) * 2 - 1;                     // organic drift of the white end
+      const fl = FLUTTER * Math.min(e, 1) * (vn(t * (1.6 + 1.4 * R2[k]) + ii * 2.3 + 1200) * 2 - 1);  // airy flutter
+      const wl = Math.max(.01, WL0[k] * (1 + amp * 1.2 * (.85 * n2 + .4 * Math.sin(t * (.3 + .6 * H2[k]) + TAU * H4[k]))
+                + .07 * Math.sin(ii / 170 + t * .38) - .06 * Math.sin(t * .4) - .5 * w - .8 * fl));
+      const lum = L0[k] * (.92 + .08 * Math.sin(t * (.3 + .8 * H2[k]) + TAU * H4[k])) * (1 + .3 * e)
+                * (1 + .3 * Math.min(1, Math.abs(w)));                       // puffs catch a little light
+      const sat = S0[k] * (1 - .3 * Math.min(e, 1));                         // cool silver sheen near the cursor
+      put(2 * s, i, 0, wl, lum, sat, SCALE);
+      const irr = Math.min(1, IR[k] * (1 + .8 * e) + .1 * e), hp = HP[k] + t * HR[k] + .5 * w;
+      put(2 * s + 1, i, irr, hp - Math.floor(hp), 0, 0, ONE);
+      // the streaks slide along the column; puffs and flutter nudge them
+      const drift = SO[i] + (t * SD[i] + 18 * w + 25 * fl) / SL[i];
+      put(4, i, SL[i], fext ? drift : ((drift % 100) + 100) % 100, SB[i], 0, FSC);
+    }
+
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, N, 5, gl.RGBA, TYPE, data);
+    gl.uniform2f(uRes, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    gl.uniform1f(uDpr, gl.drawingBufferHeight / CH);
+    gl.uniform1f(uOff, winTop);
+    gl.uniform1f(uT, t % 1001);
+    gl.uniform1f(uBroad, (t * .012) % 1000);
+    gl.uniform3f(uLight, lx, ly, LIGHT * presence);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    requestAnimationFrame(frame);
+  }
+  function run() { if (!running) { running = true; last = 0; requestAnimationFrame(frame); } }
+  run();
+})();
+</script>
+</body>
+</html>
