@@ -5,22 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Nebulapunk — Pixel Stretch Section</title>
 <!--
-  Section transition version of nebulapunk-pixel-stretch.html, made to sit behind a block of the Superhive
-  page in an iframe (see superhive-pixel-stretch-section.html for the embed code).
+  Section transition version of nebulapunk-pixel-stretch.html, made to sit in an iframe on the Superhive page
+  (see superhive-pixel-stretch-section.html for the embed code). Everything is set from the URL:
 
-  Top to bottom, in CSS px:
-    top    pure white, behind the heading
-    fade   strands pour down out of the white into the card colour
-    hold   solid card colour rgb(7,4,18), behind the key feature card (the card's corners melt into it)
-    fadeb  strands rise back up out of the card colour into white, with their own layout (not a mirror copy)
-    rest   pure white
-  The zones come from the URL so spacing can be tuned from Superhive without editing this file:
-    nebulapunk-pixel-stretch-section.html?top=140&fade=330&hold=280&fadeb=300
-  Set the iframe height to top + fade + hold + fadeb + the white you want underneath.
+    mode=in    white at the top, strands pour down into the dark, dark to the bottom edge
+               (top = px of pure white above the strands, default 0; fade = strand height, default the rest)
+    mode=out   dark at the top edge, strands rise up into white
+               (fade = strand height, default the whole iframe; bottom = px of pure white under it, default 0)
+    mode=both  white / strands / dark hold / strands / white in one iframe
+               (top, fade, hold, fadeb in px; the rest is white)
+    dark=000000  the dark colour as hex (default black)
+
+  e.g. nebulapunk-pixel-stretch-section.html?mode=in&dark=000000
 
   Same strands as the standalone effect: per-column drift, airy cursor puffs and flutter, soft light that
-  follows the cursor, slow light sweep, a few iridescent strands, true #fff white. Pauses while scrolled off
-  screen. If WebGL is unavailable the page shows a matching static white / card / white gradient.
+  follows the cursor, slow light sweep, a few iridescent strands, true #fff white. The dark end lands exactly
+  on the dark colour so the iframe meets the block next to it without a seam. Pauses while scrolled off
+  screen. Without WebGL it shows a matching static gradient.
 -->
 <style>
 html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#ffffff; }
@@ -40,13 +41,26 @@ html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
   // ---------- layout (CSS px), overridable from the URL ----------
   const Q = new URLSearchParams(location.search);
   const num = (k, d) => { const v = parseFloat(Q.get(k)); return isFinite(v) && v >= 0 ? v : d; };
-  const Z = { top: num('top', 140), fade: Math.max(1, num('fade', 330)), hold: num('hold', 280), fadeb: Math.max(1, num('fadeb', 300)) };
-  const HOLD0 = Z.top + Z.fade, HOLD1 = HOLD0 + Z.hold, END = HOLD1 + Z.fadeb;
-  const CARD = 'rgb(7,4,18)';
-
-  // static fallback, also what shows for the first frame
-  document.documentElement.style.background =
-    `linear-gradient(#fff 0px, #fff ${Z.top + Z.fade * .25}px, ${CARD} ${HOLD0}px, ${CARD} ${HOLD1}px, #fff ${HOLD1 + Z.fadeb * .75}px, #fff 100%)`;
+  const MODE = ['in', 'out', 'both'].includes(Q.get('mode')) ? Q.get('mode') : 'both';
+  const hex = (Q.get('dark') || '000000').replace(/[^0-9a-f]/gi, '').padEnd(6, '0').slice(0, 6);
+  const DARK = [0, 2, 4].map(k => parseInt(hex.slice(k, k + 2), 16));
+  const DARKCSS = `rgb(${DARK.join(',')})`;
+  const OFF = 1e7;
+  // zone boundaries in CSS px: [A, B) top strands, [B, HH) dark, [HH, E) bottom strands, white elsewhere
+  let A = 0, B = 0, HH = 0, E = 0;
+  function zones(h) {
+    if (MODE === 'in') { A = num('top', 0); B = A + Math.max(1, num('fade', h - A)); HH = E = OFF; }
+    else if (MODE === 'out') { A = B = -1; HH = 0; E = Math.max(1, num('fade', h - num('bottom', 0))); }
+    else { A = num('top', 140); B = A + Math.max(1, num('fade', 330)); HH = B + num('hold', 280); E = HH + Math.max(1, num('fadeb', 300)); }
+  }
+  function fallback(h) {                             // static gradient: no-WebGL fallback and the first frame
+    zones(h); const st = [];
+    if (MODE !== 'out') st.push(`#fff ${A + (B - A) * .25}px`, `${DARKCSS} ${B}px`);
+    else st.push(`${DARKCSS} 0px`);
+    if (MODE !== 'in') st.push(`${DARKCSS} ${HH}px`, `#fff ${HH + (E - HH) * .75}px`);
+    document.documentElement.style.background = `linear-gradient(${MODE === 'out' ? DARKCSS : '#fff'} 0px, ${st.join(', ')}, ${MODE === 'in' ? DARKCSS : '#fff'} 100%)`;
+  }
+  fallback(innerHeight);
   document.body.style.background = 'transparent';
 
   const gl = cv.getContext('webgl', { antialias:false, alpha:false, powerPreference:'high-performance' });
@@ -65,7 +79,7 @@ html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
   const PULL   = .4;    // how strongly the dark ends reach toward the cursor
   const DROPS  = [5, 11];// seconds between idle puffs (min, max)
   const GHOSTS = 3;     // invisible drifting sources that keep slow ripples moving when idle
-  const MAXLEN = .72;   // soft cap on strand length so every strand has reached the card colour at the hold
+  const MAXLEN = .72;   // soft cap on strand length so every strand has reached the dark by the end of its fade
 
   const vs = `attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }`;
   const fs = `
@@ -76,14 +90,14 @@ html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
     uniform float uCols;
     uniform vec4  uScale;     // decodes the column texture (all 1.0 with float textures)
     uniform vec3  uLight;     // cursor light: x and y in CSS px, strength
-    uniform vec4  uZones;     // top white, top fade, hold, bottom fade (CSS px)
+    uniform vec4  uB;         // zone boundaries (CSS px): top strands [x,y), dark [y,z), bottom strands [z,w)
+    uniform vec3  uDark;      // the dark colour
     uniform sampler2D uCol;   // 4 rows per column. Rows 0/2 (top/bottom strands): length, white length,
                               // brightness, saturation. Rows 1/3: iridescence, hue phase.
 
     const vec3  SILVER = vec3(.92, .95, 1.00);
     const vec3  STEEL  = vec3(.33, .47, .76);
     const vec3  NAVY   = vec3(.047, .033, .087);   // tone-maps close to the card colour
-    const vec3  CARD   = vec3(7.0, 4.0, 18.0) / 255.0;
     const float WHITE  = 2.6;   // HDR white; the tone curve is normalised so this lands on pure #fff
 
     float ign(vec2 p){ return fract(52.9829189 * fract(dot(p, vec2(.06711056, .00583715)))); }
@@ -115,19 +129,17 @@ html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
 
     // the whole section at height py (CSS px from the top)
     vec3 field(float c, float py){
-      float a = uZones.x, b = a + uZones.y, h = b + uZones.z, e = h + uZones.w;
-      if (py < a || py >= e) return vec3(WHITE);
-      if (py < b) return column(c, (py - a) / uZones.y, 0.0);
-      if (py < h) return NAVY;
-      return column(c, (e - py) / uZones.w, 2.0);
+      if (py < uB.x || py >= uB.w) return vec3(WHITE);
+      if (py < uB.y) return column(c, (py - uB.x) / max(uB.y - uB.x, 1.0), 0.0);
+      if (py < uB.z) return NAVY;
+      return column(c, (uB.w - py) / max(uB.w - uB.z, 1.0), 2.0);
     }
-    // how much to lock to the exact card colour: fully in the hold, easing in over the last 15% of each fade
-    float cardMask(float py){
-      float a = uZones.x, b = a + uZones.y, h = b + uZones.z, e = h + uZones.w;
-      if (py < a || py >= e) return 0.0;
-      if (py < b) return smoothstep(.85, 1.0, (py - a) / uZones.y);
-      if (py < h) return 1.0;
-      return smoothstep(.85, 1.0, (e - py) / uZones.w);
+    // how much to lock to the exact dark colour: fully in the dark zone, easing in over the last 20% of a fade
+    float darkMask(float py){
+      if (py < uB.x || py >= uB.w) return 0.0;
+      if (py < uB.y) return smoothstep(.8, 1.0, (py - uB.x) / max(uB.y - uB.x, 1.0));
+      if (py < uB.z) return 1.0;
+      return smoothstep(.8, 1.0, (uB.w - py) / max(uB.w - uB.z, 1.0));
     }
 
     void main(){
@@ -161,10 +173,10 @@ html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
       col = aces(col) / aces(vec3(WHITE)).r;          // normalised: WHITE maps to exactly 1.0
       col = min(col, 1.0);
 
-      float k = cardMask(py);
-      col = mix(col, CARD, k);                        // lands exactly on the card colour
+      float k = darkMask(py);
+      col = mix(col, uDark, k);                       // lands exactly on the dark colour
 
-      // fine film grain at 24fps; doubles as dither for the long fades (none on pure white or the card colour)
+      // fine film grain at 24fps; doubles as dither for the long fades (none on pure white or the dark)
       float n = ign(gl_FragCoord.xy + mod(floor(uT * 24.0), 64.0) * vec2(5.588, 3.17)) - .5;
       col += n * (3.0 / 255.0) * (1.0 - smoothstep(.97, 1.0, min(col.r, min(col.g, col.b)))) * (1.0 - k);
       gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
@@ -179,9 +191,9 @@ html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
   const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
   const U = n => gl.getUniformLocation(prog, n);
-  const uRes = U('uRes'), uT = U('uT'), uDpr = U('uDpr'), uCols = U('uCols'), uLight = U('uLight');
+  const uRes = U('uRes'), uT = U('uT'), uDpr = U('uDpr'), uCols = U('uCols'), uLight = U('uLight'), uB = U('uB');
   gl.uniform1i(U('uCol'), 0);
-  gl.uniform4f(U('uZones'), Z.top, Z.fade, Z.hold, Z.fadeb);
+  gl.uniform3f(U('uDark'), DARK[0] / 255, DARK[1] / 255, DARK[2] / 255);
   const SCALE = fext ? [1, 1, 1, 1] : [1.0, 1.6, 2.6, 1.4];   // byte fallback packs values into 0..1
   gl.uniform4f(U('uScale'), SCALE[0], SCALE[1], SCALE[2], SCALE[3]);
 
@@ -211,6 +223,8 @@ html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
     W = wrap.clientWidth; H = wrap.clientHeight;
     cv.width = Math.max(1, Math.round(W * dpr)); cv.height = Math.max(1, Math.round(H * dpr));
     gl.viewport(0, 0, cv.width, cv.height);
+    zones(H); fallback(H);
+    gl.uniform4f(uB, A, B, HH, E);
     N = Math.max(1, Math.ceil(W));
     const F = () => new Float32Array(N), F2 = () => new Float32Array(2 * N);
     en = F(); ev = F(); k1 = F(); d1 = F(); wu = F(); wv = F();
@@ -315,9 +329,10 @@ html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; back
     const kk = 1 - Math.exp(-dt * 6); lx += (mx - lx) * kk; ly += (my - ly) * kk;
 
     const t = reduce ? 0 : now / 1000 * SPEED;
-    // the cursor height in each strand set's own coordinates (0 at the white end, 1 at the card)
-    const cy = [(ly - Z.top) / Z.fade, (END - ly) / Z.fadeb];
+    // the cursor height in each strand set's own coordinates (0 at the white end, 1 at the dark)
+    const cy = [(ly - A) / (B - A), (E - ly) / (E - HH)];
     for (let s = 0; s < 2; s++) {
+      if (s === 0 ? B <= A : HH >= OFF) continue;    // this strand set isn't used in this mode
       const inBand = cy[s] > 0 && cy[s] < 1;
       for (let i = 0; i < N; i++) {
         const k = s * N + i, ii = i + s * 1337;
